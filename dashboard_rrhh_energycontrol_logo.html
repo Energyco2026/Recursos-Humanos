@@ -6,6 +6,7 @@
   <title>Dashboard RRHH | ENERGYCONTROL S.A.</title>
   <meta name="description" content="Dashboard interno de contratos y seguimiento RRHH de ENERGYCONTROL S.A." />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     :root{
       --green:#80BD01;
@@ -96,6 +97,45 @@
       border:1px solid #ffe0a6;font-size:12px;line-height:1.45;
     }
 
+
+    /* NAVIGATION */
+    .layout{display:grid;grid-template-columns:245px 1fr;min-height:calc(100vh - 76px)}
+    .sidebar{
+      background:#fff;border-right:1px solid var(--line);padding:20px 14px;
+      position:sticky;top:76px;height:calc(100vh - 76px);z-index:10;
+    }
+    .nav-title{font-size:10px;font-weight:900;color:#94a3b8;text-transform:uppercase;letter-spacing:.08em;padding:4px 12px 10px}
+    .nav-btn{
+      width:100%;border:0;background:transparent;border-radius:12px;padding:11px 12px;margin-bottom:5px;
+      display:flex;gap:10px;align-items:center;color:#526277;font-weight:750;cursor:pointer;text-align:left;
+    }
+    .nav-btn:hover{background:#f6f9fc;color:var(--navy)}
+    .nav-btn.active{background:#edf6d8;color:#527d00}
+    .nav-icon{width:22px;text-align:center;font-size:16px}
+    .content-area{min-width:0}
+    .module{display:none}
+    .module.active{display:block}
+    .welcome-grid{display:grid;grid-template-columns:1.3fr .7fr;gap:18px;margin-top:18px}
+    .summary-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px}
+    .summary-card h3{margin:0 0 14px;color:var(--navy)}
+    .action-list{display:grid;gap:10px}
+    .action-row{display:flex;justify-content:space-between;gap:12px;padding:12px;border-radius:12px;background:#f8fafc;border:1px solid #edf1f5}
+    .action-row strong{color:var(--navy);font-size:13px}
+    .action-row span{font-size:12px;color:var(--muted)}
+    .placeholder{
+      background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
+      padding:34px;min-height:360px;
+    }
+    .placeholder h3{margin:0 0 8px;color:var(--navy);font-size:22px}
+    .placeholder p{color:var(--muted);line-height:1.6;max-width:760px}
+    .coming{display:inline-flex;padding:6px 10px;border-radius:999px;background:#eef4e1;color:#527d00;font-size:11px;font-weight:900;margin-bottom:16px}
+    @media(max-width:900px){
+      .layout{grid-template-columns:1fr}
+      .sidebar{position:static;height:auto;display:flex;overflow:auto;gap:6px;padding:10px}
+      .nav-title{display:none}.nav-btn{width:auto;white-space:nowrap;margin:0}
+      .welcome-grid{grid-template-columns:1fr}
+    }
+
     /* APP */
     .app-shell{min-height:100vh}
     header{
@@ -142,6 +182,52 @@
     .kpi .label{font-size:12px;color:var(--muted);font-weight:700;margin-bottom:8px}
     .kpi .value{font-size:28px;font-weight:900;color:var(--navy);line-height:1}
     .kpi .sub{font-size:11px;color:var(--muted);margin-top:8px}
+
+    .kpi.clickable{cursor:pointer;transition:transform .15s ease,box-shadow .15s ease}
+    .kpi.clickable:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(31,56,100,.14)}
+    .type-grid{display:flex;flex-wrap:wrap;gap:9px}
+    .type-chip{
+      border:1px solid #dfe7ef;background:#f8fafc;color:var(--navy);border-radius:999px;
+      padding:8px 11px;font-size:12px;font-weight:800;cursor:pointer
+    }
+    .type-chip:hover{border-color:var(--green);background:#f2f8e5}
+    .type-chip b{color:var(--green-dark);margin-left:5px}
+    .vac-kpis{display:grid;grid-template-columns:repeat(3,minmax(160px,1fr));gap:14px;margin:16px 0}
+    .vac-table-wrap{overflow:auto;max-height:55vh;border:1px solid var(--line);border-radius:14px}
+    .vac-table{min-width:900px}
+    .vac-status{font-size:12px;color:var(--muted);margin-top:8px}
+
+    .form-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px}
+    .form-grid{display:grid;grid-template-columns:repeat(3,minmax(180px,1fr));gap:14px}
+    .form-group label{display:block;font-size:11px;font-weight:850;color:var(--navy);margin-bottom:6px;text-transform:uppercase;letter-spacing:.03em}
+    .form-group input,.form-group select,.form-group textarea{
+      width:100%;border:1px solid #dbe3ee;border-radius:10px;padding:10px 11px;background:#fff;outline:none;color:var(--text)
+    }
+    .form-group textarea{min-height:92px;resize:vertical}
+    .form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--green);box-shadow:0 0 0 3px rgba(128,189,1,.1)}
+    .span-2{grid-column:span 2}.span-3{grid-column:1/-1}
+    .section-title{margin:24px 0 12px;color:var(--navy);font-size:15px;border-bottom:1px solid var(--line);padding-bottom:8px}
+    .helper{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.45}
+    .btn-row{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+    .btn-secondary{border:1px solid #dbe3ee;background:white;color:var(--navy);border-radius:10px;padding:10px 14px;font-weight:800;cursor:pointer}
+    .btn-success{border:0;background:var(--green);color:white;border-radius:10px;padding:10px 16px;font-weight:900;cursor:pointer}
+    .contract-note{background:#f8fafc;border-left:4px solid var(--green);border-radius:10px;padding:12px 14px;margin:12px 0;color:#475569;font-size:12px;line-height:1.55}
+    .contract-cards{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:14px}
+    .contract-card{background:white;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow)}
+    .contract-card h3{margin:0 0 8px;color:var(--navy);font-size:17px}
+    .contract-card p{margin:0 0 10px;color:var(--muted);font-size:13px;line-height:1.55}
+    .contract-card ul{margin:8px 0 0;padding-left:18px;color:#475569;font-size:12px;line-height:1.55}
+    .contract-tag{display:inline-flex;padding:5px 8px;border-radius:999px;background:#eef4e1;color:#527d00;font-size:10px;font-weight:900;margin-bottom:10px}
+    .contract-tag.pending{background:#fff3d6;color:#9a6700}
+    .preview-box{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:16px;display:none}
+    .preview-box.show{display:block}
+    .preview-box h4{margin:0 0 10px;color:var(--navy)}
+    .preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px}
+    .vac-toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap}
+    .vac-toolbar input{min-width:260px;border:1px solid #dbe3ee;border-radius:10px;padding:9px 11px}
+    .status-pills{display:flex;gap:8px;flex-wrap:wrap}
+    .status-pill{padding:6px 9px;border-radius:999px;background:#f1f5f9;font-size:11px;font-weight:800;color:#475569}
+    @media(max-width:900px){.form-grid{grid-template-columns:1fr}.span-2,.span-3{grid-column:auto}.contract-cards{grid-template-columns:1fr}.preview-grid{grid-template-columns:1fr}}
 
     .panel{
       background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
@@ -233,9 +319,61 @@
       .filters .search{grid-column:auto}
       .detail-grid{grid-template-columns:1fr}
     }
+
+    /* EVALUACIONES + COMISIONES */
+    .eval-public{min-height:100vh;display:grid;place-items:center;padding:24px;background:linear-gradient(135deg,#f7fafc,#eef5fb)}
+    .eval-public-card{width:min(760px,100%);background:#fff;border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow);padding:30px}
+    .eval-public-card h2{margin:0 0 8px;color:var(--navy)}
+    .eval-public-card .intro{color:var(--muted);line-height:1.55;margin-bottom:20px}
+    .eval-grid,.commission-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+    .eval-grid .span-2,.commission-grid .span-2{grid-column:span 2}.eval-grid .span-3,.commission-grid .span-3{grid-column:1/-1}
+    .field-lite label{display:block;font-size:12px;font-weight:800;color:var(--navy);margin:0 0 6px}
+    .field-lite input,.field-lite select,.field-lite textarea{width:100%;padding:11px 12px;border:1px solid #d7dee9;border-radius:10px;background:#fff;outline:none}
+    .field-lite textarea{min-height:88px;resize:vertical}
+    .toolbar-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow);margin-bottom:16px}
+    .toolbar-flex{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.toolbar-flex>div{min-width:180px;flex:1}
+    .status-note{padding:10px 12px;border-radius:10px;background:#f8fafc;color:var(--muted);font-size:13px}
+    .status-note.ok{background:#eef8df;color:#527d00}.status-note.err{background:#fff1f2;color:#b91c1c}
+    .eval-table-wrap,.commission-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px;background:#fff}
+    .eval-table,.commission-table{width:100%;border-collapse:collapse;min-width:980px}
+    .eval-table th,.eval-table td,.commission-table th,.commission-table td{padding:11px 12px;border-bottom:1px solid var(--line);font-size:13px;text-align:left;vertical-align:middle}
+    .eval-table th,.commission-table th{background:#f8fafc;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.02em}
+    .btn-mini{border:1px solid #d7dee9;background:#fff;color:var(--navy);padding:7px 9px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer}
+    .btn-mini:hover{background:#f7fafc}.btn-mini.green{background:#eef8df;color:#527d00;border-color:#d5e9a8}.btn-mini.blue{background:#edf4ff;color:#1d4ed8;border-color:#cfe0ff}
+    .commission-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:14px 0}
+    .commission-kpis .mini{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}.commission-kpis .mini .l{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase}.commission-kpis .mini .v{font-size:19px;font-weight:800;color:var(--navy);margin-top:6px}
+    .commission-panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px}
+    .commission-panel h3{margin:0 0 14px;color:var(--navy)}
+    .invoice-check{width:18px;height:18px}.right{text-align:right!important}.center{text-align:center!important}
+    .participant-row{display:grid;grid-template-columns:2fr .8fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px}
+    .participant-row input,.participant-row select{width:100%;padding:9px;border:1px solid #d7dee9;border-radius:9px}
+    .saved-card{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;background:#fbfdff}
+    .modal.wide{width:min(880px,calc(100vw - 32px))}
+    @media(max-width:1000px){.commission-kpis{grid-template-columns:repeat(3,1fr)}.eval-grid,.commission-grid{grid-template-columns:1fr 1fr}.participant-row{grid-template-columns:1fr 1fr}.participant-row .wide-part{grid-column:1/-1}}
+    @media(max-width:650px){.commission-kpis{grid-template-columns:1fr 1fr}.eval-grid,.commission-grid{grid-template-columns:1fr}.eval-grid .span-2,.commission-grid .span-2,.eval-grid .span-3,.commission-grid .span-3{grid-column:auto}.participant-row{grid-template-columns:1fr}}
+
   </style>
 </head>
 <body>
+
+
+<section id="publicEvalView" class="eval-public hidden">
+  <div class="eval-public-card">
+    <div class="brand" style="margin-bottom:18px"><div class="brand-mark">E</div><div><h1 style="margin:0">ENERGYCONTROL S.A.</h1><small>Evaluación de colaborador</small></div></div>
+    <h2 id="pubEvalTitle">Evaluación de colaborador</h2>
+    <p class="intro" id="pubEvalIntro">Cargando información...</p>
+    <div id="pubEvalForm" class="hidden">
+      <div class="eval-grid">
+        <div class="field-lite"><label>Evaluado por</label><input id="pubEvaluator" placeholder="Nombre del responsable"></div>
+        <div class="field-lite"><label>Decisión</label><select id="pubDecision"><option value="">Selecciona...</option><option value="continuar">Continuar seguimiento</option><option value="renovar">Renovar contrato</option><option value="extender_indefinido">Pasar / extender a indefinido</option><option value="prescindir">No renovar / prescindir</option></select></div>
+        <div class="field-lite"><label>Desempeño</label><select id="pubPerformance"><option value="">Selecciona...</option><option>Excelente</option><option>Muy bueno</option><option>Bueno</option><option>Regular</option><option>No satisfactorio</option></select></div>
+        <div class="field-lite span-3"><label>Comentarios</label><textarea id="pubComments" placeholder="Observaciones, fortalezas, puntos de mejora o sustento de la decisión..."></textarea></div>
+      </div>
+      <div class="btn-row" style="margin-top:18px"><button class="btn-success" id="pubSubmitBtn">Enviar evaluación</button></div>
+      <div id="pubEvalMsg" class="status-note" style="margin-top:12px"></div>
+    </div>
+  </div>
+</section>
 
 <section id="loginView">
   <div class="login-card">
@@ -280,11 +418,68 @@
     </div>
   </header>
 
-  <main>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="nav-title">Módulos RRHH</div>
+      <button class="nav-btn active" data-module="resumen"><span class="nav-icon">⌂</span>Resumen RRHH</button>
+      <button class="nav-btn" data-module="contratos"><span class="nav-icon">▤</span>Colaboradores / Contratos</button>
+      <button class="nav-btn" data-module="evaluaciones"><span class="nav-icon">✓</span>Evaluaciones</button>
+      <button class="nav-btn" data-module="comisiones"><span class="nav-icon">$</span>Comisiones</button>
+      <button class="nav-btn" data-module="documentos"><span class="nav-icon">▣</span>Documentos faltantes</button>
+      <button class="nav-btn" data-module="generar"><span class="nav-icon">✎</span>Generar contratos</button>
+      <button class="nav-btn" data-module="tipos"><span class="nav-icon">?</span>Tipos de contrato</button>
+      <button class="nav-btn" data-module="vacaciones"><span class="nav-icon">☀</span>Vacaciones</button>
+    </aside>
+    <div class="content-area">
+      <main>
+        <section id="module-resumen" class="module active">
+          <div class="page-heading">
+            <div>
+              <h2>Resumen RRHH</h2>
+              <p>Panel gerencial de colaboradores, contratos vigentes y pendientes de gestión.</p>
+            </div>
+            <div class="sync-info">
+              <div>Última sincronización</div>
+              <strong id="lastSyncSummary">—</strong>
+            </div>
+          </div>
+          <section class="kpis">
+            <article class="kpi blue clickable" data-drill="all"><div class="label">Contratos vigentes</div><div class="value" id="sumTotal">0</div><div class="sub">Sin contratos vencidos</div></article>
+            <article class="kpi clickable" data-drill="all"><div class="label">Colaboradores</div><div class="value" id="sumEmployees">0</div><div class="sub">Empleados únicos</div></article>
+            <article class="kpi green clickable" data-drill="indef"><div class="label">Indefinidos</div><div class="value" id="sumIndef">0</div><div class="sub">Contratos tipo indefinido</div></article>
+            <article class="kpi yellow clickable" data-drill="upcoming"><div class="label">Próximos hitos</div><div class="value" id="sumMilestones">0</div><div class="sub">Gestión próxima</div></article>
+            <article class="kpi red clickable" data-drill="urgent"><div class="label">Urgentes</div><div class="value" id="sumUrgent">0</div><div class="sub">15 días o menos</div></article>
+            <article class="kpi blue clickable" data-drill="evaluations"><div class="label">Evaluaciones pendientes</div><div class="value" id="sumEvaluations">—</div><div class="sub">Módulo en integración</div></article>
+          </section>
+
+          <div class="summary-card" style="margin-top:18px">
+            <h3>Tipos de contrato</h3>
+            <p class="muted" style="margin-top:-5px">Haz clic en un tipo para ver únicamente esos contratos.</p>
+            <div id="typeDistribution" class="type-grid"></div>
+          </div>
+
+          <div class="welcome-grid">
+            <div class="summary-card">
+              <h3>Prioridades de RRHH</h3>
+              <div class="action-list">
+                <div class="action-row"><div><strong>Hitos y vencimientos próximos</strong><br><span>Revisar decisiones que requieren seguimiento.</span></div><strong id="priorityUpcoming">0</strong></div>
+                <div class="action-row"><div><strong>Casos urgentes</strong><br><span>Contratos o hitos con 15 días o menos.</span></div><strong id="priorityUrgent">0</strong></div>
+                <div class="action-row"><div><strong>Contratos indefinidos</strong><br><span>Colaboradores bajo modalidad indefinida.</span></div><strong id="priorityIndef">0</strong></div>
+              </div>
+            </div>
+            <div class="summary-card">
+              <h3>Sistema RRHH</h3>
+              <p class="muted" style="line-height:1.6">Esta pantalla concentra la gestión. Usa el menú izquierdo para revisar contratos, evaluaciones, documentos, generación contractual y vacaciones.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="module-contratos" class="module">
+
     <div class="page-heading">
       <div>
-        <h2>Contratos de colaboradores</h2>
-        <p>Vista consolidada de Odoo con hitos, vencimientos y alertas de RRHH.</p>
+        <h2>Colaboradores / Contratos</h2>
+        <p>Contratos vigentes y próximos hitos. Los contratos vencidos se conservan como histórico, pero no se muestran aquí.</p>
       </div>
       <div class="sync-info">
         <div>Última sincronización</div>
@@ -328,7 +523,7 @@
     <section class="panel">
       <div class="filters">
         <input class="search" id="searchInput" placeholder="Buscar colaborador, cargo o jefe...">
-        <select id="typeFilter"><option value="">Todos los contratos</option></select>
+        <select id="typeFilter"><option value="">Todos los tipos de contrato</option></select>
         <select id="bossFilter"><option value="">Todos los jefes</option></select>
         <select id="statusFilter">
           <option value="">Todos los estados</option>
@@ -336,7 +531,6 @@
           <option value="PROXIMO_HITO">Próximo hito</option>
           <option value="PROXIMO_VENCER">Próximo a vencer</option>
           <option value="URGENTE">Urgente</option>
-          <option value="VENCIDO">Vencido</option>
           <option value="INACTIVO">Inactivo</option>
         </select>
         <button class="export-btn" id="exportBtn">↓ Exportar CSV</button>
@@ -370,7 +564,271 @@
         <div id="empty" class="empty hidden">No hay contratos que coincidan con los filtros.</div>
       </div>
     </section>
-  </main>
+
+        </section>
+
+
+        <section id="module-evaluaciones" class="module">
+          <div class="page-heading">
+            <div><h2>Evaluaciones</h2><p>Las alertas contractuales generan un enlace único para el jefe. También puedes subir manualmente evaluaciones ya recibidas.</p></div>
+            <div><button class="small-btn" id="evalRefreshBtn">↻ Actualizar evaluaciones</button></div>
+          </div>
+          <section class="kpis" style="margin-bottom:16px">
+            <article class="kpi yellow"><div class="label">Pendientes</div><div class="value" id="evalPendingKpi">0</div><div class="sub">Esperando respuesta</div></article>
+            <article class="kpi green"><div class="label">Recibidas</div><div class="value" id="evalReceivedKpi">0</div><div class="sub">Con respuesta o archivo</div></article>
+            <article class="kpi blue"><div class="label">Renovar / continuar</div><div class="value" id="evalContinueKpi">0</div><div class="sub">Decisiones positivas</div></article>
+            <article class="kpi red"><div class="label">No renovar</div><div class="value" id="evalStopKpi">0</div><div class="sub">Requieren gestión de salida</div></article>
+          </section>
+          <div class="toolbar-card">
+            <div class="toolbar-flex">
+              <div class="field-lite"><label>Buscar</label><input id="evalSearch" placeholder="Empleado, jefe, hito, decisión..."></div>
+              <div class="field-lite"><label>Estado</label><select id="evalStatus"><option value="">Todos</option><option value="pendiente">Pendientes</option><option value="recibida">Recibidas</option></select></div>
+              <div class="status-note">Para crear una nueva evaluación entra a <b>Colaboradores / Contratos</b>, abre el contrato y usa <b>Enviar evaluación</b>.</div>
+            </div>
+          </div>
+          <div id="evalLoading" class="loading hidden">Cargando evaluaciones...</div>
+          <div class="eval-table-wrap">
+            <table class="eval-table"><thead><tr><th>Empleado</th><th>Hito</th><th>Jefe</th><th>Estado</th><th>Recibida</th><th>Decisión</th><th>Siguiente acción</th><th>Archivo</th><th>Acciones</th></tr></thead><tbody id="evalBody"></tbody></table>
+          </div>
+          <input id="evalFileInput" type="file" class="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png">
+        </section>
+
+        <section id="module-comisiones" class="module">
+          <div class="page-heading">
+            <div><h2>Cálculo de comisiones</h2><p>Venta, facturación, cobros y analítica se consultan desde la misma base financiera del dashboard de Operaciones.</p></div>
+            <div><button class="small-btn" id="commRefreshBtn">↻ Actualizar datos</button></div>
+          </div>
+          <div id="commConnection" class="status-note">Fuente financiera: sin consultar.</div>
+          <div class="commission-panel" style="margin-top:14px">
+            <div class="commission-grid">
+              <div class="field-lite span-2"><label>PO / Proyecto</label><select id="commProject"><option value="">Selecciona una PO...</option></select></div>
+              <div class="field-lite"><label>Periodo de pago</label><input id="commPeriod" type="month"></div>
+              <div class="field-lite"><label>Base para comisión</label><select id="commBaseType"><option value="cobrado">Cobrado</option><option value="facturado">Facturado</option><option value="venta">Venta / contrato</option></select></div>
+              <div class="field-lite"><label>% comisión por defecto</label><input id="commPct" type="number" step="0.01" min="0" value="5"></div>
+              <div class="field-lite"><label>Incluir en pago</label><select id="commInclude"><option value="1">Sí</option><option value="0">No</option></select></div>
+            </div>
+          </div>
+          <div class="commission-kpis">
+            <div class="mini"><div class="l">Valor venta</div><div class="v" id="commSale">$0,00</div></div>
+            <div class="mini"><div class="l">Facturado seleccionado</div><div class="v" id="commInvoiced">$0,00</div></div>
+            <div class="mini"><div class="l">Cobrado seleccionado</div><div class="v" id="commPaid">$0,00</div></div>
+            <div class="mini"><div class="l">Saldo pendiente</div><div class="v" id="commPending">$0,00</div></div>
+            <div class="mini"><div class="l">Margen esperado</div><div class="v" id="commMarginExpected">—</div></div>
+            <div class="mini"><div class="l">Margen real</div><div class="v" id="commMarginReal">—</div></div>
+          </div>
+          <div class="commission-panel">
+            <h3>Datos del proyecto</h3>
+            <div class="commission-grid">
+              <div class="field-lite"><label>Cliente</label><input id="commClient" readonly></div>
+              <div class="field-lite span-2"><label>Cuenta analítica</label><input id="commAnalytic" readonly></div>
+              <div class="field-lite"><label>Base comisionable</label><input id="commBase" readonly></div>
+              <div class="field-lite"><label>Comisión estimada</label><input id="commGross" readonly></div>
+              <div class="field-lite"><label>Documentos seleccionados</label><input id="commDocs" readonly></div>
+            </div>
+          </div>
+          <div class="commission-panel">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Facturas / cobros</h3><span class="muted">Marca únicamente los documentos que deben entrar al cálculo.</span></div>
+            <div class="commission-table-wrap" style="margin-top:12px"><table class="commission-table"><thead><tr><th class="center">Incluir</th><th>Factura</th><th>Cliente</th><th>Analítica</th><th>Vendedor</th><th class="right">Facturado</th><th class="right">Cobrado</th><th class="right">Pendiente</th></tr></thead><tbody id="commInvoiceBody"></tbody></table></div>
+          </div>
+          <div class="commission-panel">
+            <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Empleados / participación</h3><button class="btn-mini green" id="commAddParticipant">+ Agregar empleado</button></div>
+            <div id="commParticipants" style="margin-top:12px"></div>
+            <div class="commission-kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+              <div class="mini"><div class="l">Comisión bruta total</div><div class="v" id="commTotalGross">$0,00</div></div>
+              <div class="mini"><div class="l">IESS 9,45%</div><div class="v" id="commTotalIess">$0,00</div></div>
+              <div class="mini"><div class="l">Neto total a pagar</div><div class="v" id="commTotalNet">$0,00</div></div>
+            </div>
+            <div class="btn-row"><button class="btn-secondary" id="commPrintBtn">Generar reporte</button><button class="btn-secondary" id="commExcelBtn">Exportar Excel</button><button class="btn-success" id="commSaveBtn">Guardar cálculo</button></div>
+          </div>
+          <div class="commission-panel"><h3>Histórico guardado</h3><div id="commSaved">Sin cálculos guardados.</div></div>
+        </section>
+
+        <section id="module-documentos" class="module">
+          <div class="page-heading"><div><h2>Documentos faltantes</h2><p>Control documental por colaborador.</p></div></div>
+          <div class="placeholder"><span class="coming">MÓDULO PREPARADO</span><h3>Expediente documental</h3><p>Esta sección mostrará documentos faltantes y completos por colaborador. Antes de automatizarla debemos identificar los campos o la pestaña exacta de documentos en Odoo.</p></div>
+        </section>
+
+        <section id="module-generar" class="module">
+          <div class="page-heading">
+            <div>
+              <h2>Generar contratos</h2>
+              <p>Completa los datos del colaborador y la información específica de la plantilla.</p>
+            </div>
+          </div>
+
+          <div class="form-card">
+            <div class="contract-note">
+              Los datos que ya existen en Odoo se completan al seleccionar al colaborador. Los campos personales o específicos del contrato quedan para revisión manual antes de generar el Word.
+            </div>
+
+            <h3 class="section-title">1. Selección</h3>
+            <div class="form-grid">
+              <div class="form-group span-2">
+                <label>Colaborador</label>
+                <select id="genEmployee"><option value="">Selecciona un colaborador...</option></select>
+              </div>
+              <div class="form-group">
+                <label>Plantilla / tipo de contrato</label>
+                <select id="genTemplate">
+                  <option value="">Selecciona...</option>
+                  <option value="indef1">Indefinido 1 - Estructura fija / soporte</option>
+                  <option value="indef2">Indefinido 2 - Dirección / confianza</option>
+                  <option value="indef3">Indefinido 3 - Comercial + comisiones</option>
+                  <option value="obra">Obra o servicio determinado</option>
+                  <option value="pasantia">Pasantías - pendiente plantilla</option>
+                  <option value="sector">Sector Productivo - pendiente plantilla</option>
+                  <option value="eventual">Trabajo Eventual Discontinuo - pendiente plantilla</option>
+                </select>
+                <div class="helper">Usa la pestaña “Tipos de contrato” si necesitas revisar cuál corresponde.</div>
+              </div>
+            </div>
+
+            <h3 class="section-title">2. Datos del trabajador</h3>
+            <div class="form-grid">
+              <div class="form-group"><label>Nombre completo</label><input id="genName"></div>
+              <div class="form-group"><label>Cédula / identificación</label><input id="genIdNumber" placeholder="Número de identificación"></div>
+              <div class="form-group"><label>Nacionalidad</label><input id="genNationality" value="Ecuatoriana"></div>
+
+              <div class="form-group"><label>Estado civil</label>
+                <select id="genCivil"><option value="">Selecciona...</option><option>Soltero/a</option><option>Casado/a</option><option>Divorciado/a</option><option>Viudo/a</option><option>Unión de hecho</option></select>
+              </div>
+              <div class="form-group"><label>Profesión</label><input id="genProfession"></div>
+              <div class="form-group"><label>Cargo</label><input id="genJob"></div>
+
+              <div class="form-group"><label>Sueldo mensual USD</label><input id="genSalary" type="number" step="0.01"></div>
+              <div class="form-group"><label>Fecha de inicio</label><input id="genStart" type="date"></div>
+              <div class="form-group"><label>Fecha fin / tentativa</label><input id="genEnd" type="date"></div>
+            </div>
+
+            <h3 class="section-title">3. Lugar y jornada</h3>
+            <div class="form-grid">
+              <div class="form-group"><label>Ciudad de firma</label><input id="genCity" value="Guayaquil"></div>
+              <div class="form-group span-2"><label>Lugar / dirección de trabajo</label><input id="genWorkplace" placeholder="Ciudad / Dirección"></div>
+              <div class="form-group"><label>Horario desde</label><input id="genTimeFrom" type="time"></div>
+              <div class="form-group"><label>Horario hasta</label><input id="genTimeTo" type="time"></div>
+              <div class="form-group"><label>Tiempo de alimentación</label><input id="genBreak" placeholder="Ej. 1 hora"></div>
+              <div class="form-group span-3"><label>Días de trabajo</label><input id="genWorkDays" placeholder="Ej. lunes a viernes"></div>
+            </div>
+
+            <div id="projectFields">
+              <h3 class="section-title">4. Datos de obra / servicio</h3>
+              <div class="form-grid">
+                <div class="form-group span-2"><label>Nombre de la obra / proyecto principal</label><input id="genProject"></div>
+                <div class="form-group"><label>Cliente final</label><input id="genClient"></div>
+                <div class="form-group"><label>N.º contrato comercial / referencia</label><input id="genCommercialContract"></div>
+                <div class="form-group"><label>Fecha contrato comercial</label><input id="genCommercialDate" type="date"></div>
+                <div class="form-group"><label>Culminación tentativa</label><input id="genEstimatedEnd" type="date"></div>
+                <div class="form-group span-3"><label>Alcance específico del trabajador</label><textarea id="genScope" placeholder="Ej. montaje eléctrico, fase de cimentación, supervisión del proyecto..."></textarea></div>
+              </div>
+            </div>
+
+            <h3 class="section-title">5. Revisión / cláusulas adicionales</h3>
+            <div class="form-grid">
+              <div class="form-group span-3"><label>Observaciones o cláusulas a ajustar</label><textarea id="genNotes" placeholder="Escribe aquí cualquier ajuste que deba revisarse antes de firma."></textarea></div>
+            </div>
+
+            <div class="btn-row">
+              <button class="btn-secondary" id="genClearBtn">Limpiar</button>
+              <button class="btn-secondary" id="genPreviewBtn">Vista previa de datos</button>
+              <button class="btn-success" id="genWordBtn">Preparar contrato</button>
+            </div>
+
+            <div id="genPreview" class="preview-box"></div>
+          </div>
+        </section>
+
+        <section id="module-tipos" class="module">
+          <div class="page-heading">
+            <div>
+              <h2>¿Qué significa cada contrato?</h2>
+              <p>Guía interna basada en las plantillas que ya cargaste para ENERGYCONTROL.</p>
+            </div>
+          </div>
+
+          <div class="contract-cards">
+            <article class="contract-card">
+              <span class="contract-tag">PLANTILLA DISPONIBLE</span>
+              <h3>Indefinido 1 — Estructura fija / soporte</h3>
+              <p>Para personal fijo que no depende de la duración de una obra o proyecto.</p>
+              <ul><li>Administrativos no comerciales.</li><li>Personal operativo fijo, taller, mantenimiento interno, mensajería, choferes o servicios generales.</li><li>No es la plantilla para cargos de confianza ni personal con comisiones.</li></ul>
+            </article>
+
+            <article class="contract-card">
+              <span class="contract-tag">PLANTILLA DISPONIBLE</span>
+              <h3>Indefinido 2 — Dirección / confianza</h3>
+              <p>Para personal de dirección y alta responsabilidad con atribuciones reales de decisión y representación.</p>
+              <ul><li>Gerentes, jefes, directores, coordinadores o administradores cuando efectivamente tienen funciones de dirección.</li><li>La plantilla contempla el tratamiento de cargo de confianza.</li></ul>
+            </article>
+
+            <article class="contract-card">
+              <span class="contract-tag">PLANTILLA DISPONIBLE</span>
+              <h3>Indefinido 3 — Comercial + comisiones</h3>
+              <p>Para equipo comercial estratégico y de campo cuyos ingresos incluyen comisiones y que opera bajo esquema de confianza.</p>
+              <ul><li>Asesores comerciales, ejecutivos de cuenta y vendedores de campo.</li><li>Incluye sueldo fijo más componente variable sujeto a la política de comisiones.</li></ul>
+            </article>
+
+            <article class="contract-card">
+              <span class="contract-tag">PLANTILLA DISPONIBLE</span>
+              <h3>Obra o Servicio Determinado</h3>
+              <p>Para una obra, proyecto o servicio técnico específico y demostrable.</p>
+              <ul><li>Debe identificarse el proyecto, cliente, referencia contractual y alcance del trabajador.</li><li>La duración depende de la obra o servicio asignado.</li><li>La plantilla incorpora anexos técnicos de asignación.</li></ul>
+            </article>
+
+            <article class="contract-card">
+              <span class="contract-tag pending">PENDIENTE PLANTILLA</span>
+              <h3>Contrato de Pasantías</h3>
+              <p>Este tipo aparece actualmente en Odoo, pero en los archivos disponibles todavía no tenemos su plantilla maestra ni sus reglas de llenado.</p>
+            </article>
+
+            <article class="contract-card">
+              <span class="contract-tag pending">PENDIENTE PLANTILLA</span>
+              <h3>Sector Productivo</h3>
+              <p>Este tipo aparece actualmente en Odoo. La automatización de alertas ya lo identifica para el hito de 180 días, pero falta cargar aquí la plantilla contractual específica.</p>
+            </article>
+
+            <article class="contract-card">
+              <span class="contract-tag pending">PENDIENTE PLANTILLA</span>
+              <h3>Trabajo Eventual Discontinuo</h3>
+              <p>Este tipo aparece actualmente en Odoo, pero todavía no contamos en los archivos cargados con la plantilla maestra para automatizar su generación.</p>
+            </article>
+
+            <article class="contract-card">
+              <span class="contract-tag pending">VALIDAR EQUIVALENCIA</span>
+              <h3>Contrato Obra Cierta</h3>
+              <p>Odoo registra este tipo. La plantilla disponible que tenemos es “Obra o Servicio Determinado dentro del Giro del Negocio”; antes de automatizar la generación conviene confirmar que corresponde exactamente al uso de “Obra Cierta” en tu Odoo.</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="module-vacaciones" class="module">
+          <div class="page-heading">
+            <div><h2>Vacaciones</h2><p>Información consumida desde EnergyVacations a través de un proxy seguro en Supabase.</p></div>
+            <div><button class="small-btn" id="vacRefreshBtn">↻ Actualizar vacaciones</button></div>
+          </div>
+          <div class="vac-kpis">
+            <article class="kpi blue"><div class="label">Registros</div><div class="value" id="vacTotal">—</div><div class="sub">Respuesta del API</div></article>
+            <article class="kpi"><div class="label">Colaboradores</div><div class="value" id="vacEmployees">—</div><div class="sub">Personas identificadas</div></article>
+            <article class="kpi yellow"><div class="label">Pendientes</div><div class="value" id="vacPending">—</div><div class="sub">Según estado del API</div></article>
+            <article class="kpi green"><div class="label">Aprobadas</div><div class="value" id="vacApproved">—</div><div class="sub">Según estado del API</div></article>
+            <article class="kpi blue"><div class="label">Días registrados</div><div class="value" id="vacDays">—</div><div class="sub">Cuando el API informa días</div></article>
+            <article class="kpi"><div class="label">Conexión</div><div class="value" id="vacState" style="font-size:18px">Sin consultar</div><div class="sub" id="vacUpdated">—</div></article>
+          </div>
+          <div class="panel" style="padding:16px">
+            <div class="vac-toolbar">
+              <input id="vacSearch" placeholder="Buscar colaborador, estado, fecha...">
+              <div id="vacStatusPills" class="status-pills"></div>
+            </div>
+            <div id="vacLoading" class="loading hidden">Consultando EnergyVacations...</div>
+            <div id="vacError" class="empty hidden"></div>
+            <div id="vacData" class="hidden">
+              <div class="table-meta"><span id="vacCount">0 registros</span><span>Datos en tiempo real del sistema de vacaciones</span></div>
+              <div class="vac-table-wrap"><table class="vac-table"><thead id="vacHead"></thead><tbody id="vacBody"></tbody></table></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
 </section>
 
 <div id="modalBackdrop" class="modal-backdrop hidden">
@@ -381,6 +839,24 @@
     </div>
     <div class="modal-body">
       <div class="detail-grid" id="modalGrid"></div>
+      <div class="btn-row" style="margin-top:18px"><button class="btn-success" id="modalEvalBtn">Enviar evaluación</button></div>
+    </div>
+  </div>
+</div>
+
+
+<div id="evalModalBackdrop" class="modal-backdrop hidden">
+  <div class="modal wide">
+    <div class="modal-head"><h3 id="evalModalTitle">Gestionar evaluación</h3><button class="modal-close" id="evalModalClose">×</button></div>
+    <div class="modal-body">
+      <div class="eval-grid">
+        <div class="field-lite"><label>Decisión</label><select id="evalEditDecision"><option value="">Pendiente</option><option value="continuar">Continuar</option><option value="renovar">Renovar</option><option value="extender_indefinido">Pasar a indefinido</option><option value="prescindir">No renovar / prescindir</option></select></div>
+        <div class="field-lite"><label>Desempeño</label><input id="evalEditPerformance" placeholder="Excelente, Bueno, Regular..."></div>
+        <div class="field-lite"><label>Evaluador</label><input id="evalEditEvaluator"></div>
+        <div class="field-lite span-3"><label>Comentarios</label><textarea id="evalEditComments"></textarea></div>
+        <div class="field-lite span-3"><label>Siguiente alerta / acción</label><input id="evalEditNext" placeholder="Ej. Preparar renovación contractual"></div>
+      </div>
+      <div class="btn-row" style="margin-top:16px"><button class="btn-secondary" id="evalModalUpload">Subir archivo</button><button class="btn-success" id="evalModalSave">Guardar evaluación</button></div>
     </div>
   </div>
 </div>
@@ -393,15 +869,27 @@
    - NUNCA coloque aquí la Secret Key.
 ============================================================ */
 const SUPABASE_URL = "https://icgkeajnhtzbczefjoxs.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "PEGA_AQUI_TU_PUBLISHABLE_KEY";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_PrxYUhxfS-81qunGaHrjKA_5cPndSWl";
+const OPS_SUPABASE_URL = "https://wiqnfnlnsdnkxgshchjg.supabase.co";
+const OPS_SUPABASE_KEY = "sb_publishable_Rk88NYc5jpdJiTQgUKViZA_0VvpbRpE";
 
 /* ============================================================ */
 
 let sb = null;
+let opsSb = null;
 let allContracts = [];
 let filteredContracts = [];
 let sortField = "empleado_nombre";
 let sortDir = 1;
+let drillMode = "";
+let vacationsLoaded = false;
+let evaluationsLoaded = false;
+let evaluations = [];
+let currentContract = null;
+let selectedEvalToken = null;
+let opsProjects = [];
+let opsInvoices = [];
+let commissionsLoaded = false;
 
 const $ = id => document.getElementById(id);
 
@@ -411,6 +899,7 @@ function initSupabase(){
     return false;
   }
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  opsSb = supabase.createClient(OPS_SUPABASE_URL, OPS_SUPABASE_KEY,{auth:{storageKey:"energycontrol-ops-auth",persistSession:true,autoRefreshToken:true}});
   return true;
 }
 
@@ -463,6 +952,7 @@ async function login(){
   const password = $("password").value;
 
   const {data,error} = await sb.auth.signInWithPassword({email,password});
+  if(!error && opsSb){ try{ await opsSb.auth.signInWithPassword({email,password}); }catch(e){ console.warn("Fuente financiera no conectada",e); } }
   $("loginBtn").disabled = false;
   $("loginBtn").textContent = "Ingresar";
 
@@ -476,6 +966,7 @@ async function login(){
 
 async function logout(){
   if(sb) await sb.auth.signOut();
+  if(opsSb) try{await opsSb.auth.signOut();}catch(e){}
   $("appView").classList.add("hidden");
   $("loginView").classList.remove("hidden");
   $("password").value = "";
@@ -498,6 +989,7 @@ async function loadContracts(){
     .from("contratos_dashboard")
     .select("*")
     .eq("activo",true)
+    .neq("estado","VENCIDO")
     .order("empleado_nombre",{ascending:true});
 
   if(error){
@@ -506,9 +998,11 @@ async function loadContracts(){
   }
 
   allContracts = data || [];
-  $("lastSync").textContent = allContracts.length
+  const syncText = allContracts.length
     ? new Date(Math.max(...allContracts.map(x=>new Date(x.actualizado_en||0)))).toLocaleString("es-EC")
     : "Sin datos";
+  $("lastSync").textContent = syncText;
+  $("lastSyncSummary").textContent = syncText;
 
   buildFilters();
   updateKpis();
@@ -521,11 +1015,46 @@ function buildFilters(){
   const types = [...new Set(allContracts.map(x=>x.tipo_contrato).filter(Boolean))].sort();
   const bosses = [...new Set(allContracts.map(x=>x.jefe_nombre).filter(Boolean))].sort();
 
-  $("typeFilter").innerHTML = '<option value="">Todos los contratos</option>' +
+  $("typeFilter").innerHTML = '<option value="">Todos los tipos de contrato</option>' +
     types.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
 
   $("bossFilter").innerHTML = '<option value="">Todos los jefes</option>' +
     bosses.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
+
+  const counts = {};
+  allContracts.forEach(x=>{
+    const t = x.tipo_contrato || "No especificado";
+    counts[t] = (counts[t] || 0) + 1;
+  });
+  $("typeDistribution").innerHTML = Object.entries(counts)
+    .sort((a,b)=>b[1]-a[1])
+    .map(([t,n])=>`<button class="type-chip" data-type="${esc(t)}">${esc(t)} <b>${n}</b></button>`)
+    .join("");
+
+  $("typeDistribution").querySelectorAll(".type-chip").forEach(btn=>{
+    btn.addEventListener("click",()=>{
+      navigateModule("contratos");
+      drillMode = "";
+      $("typeFilter").value = btn.dataset.type;
+      $("statusFilter").value = "";
+      $("searchInput").value = "";
+      applyFilters();
+    });
+  });
+
+  const uniqueEmployees = [];
+  const seenEmployees = new Set();
+  allContracts
+    .slice()
+    .sort((a,b)=>(a.empleado_nombre||"").localeCompare(b.empleado_nombre||"","es"))
+    .forEach(x=>{
+      if(x.empleado_id && !seenEmployees.has(x.empleado_id)){
+        seenEmployees.add(x.empleado_id);
+        uniqueEmployees.push(x);
+      }
+    });
+  $("genEmployee").innerHTML = '<option value="">Selecciona un colaborador...</option>' +
+    uniqueEmployees.map(x=>`<option value="${x.empleado_id}">${esc(x.empleado_nombre)}</option>`).join("");
 }
 
 function updateKpis(){
@@ -535,7 +1064,20 @@ function updateKpis(){
   $("kpiIndef").textContent = active.filter(x=>(x.tipo_contrato||"").toLowerCase().includes("indefinido")).length;
   $("kpiMilestones").textContent = active.filter(x=>x.estado==="PROXIMO_HITO").length;
   $("kpiExpire").textContent = active.filter(x=>x.estado==="PROXIMO_VENCER").length;
-  $("kpiUrgent").textContent = active.filter(x=>x.estado==="URGENTE" || x.estado==="VENCIDO").length;
+  const indef = active.filter(x=>(x.tipo_contrato||"").toLowerCase().includes("indefinido")).length;
+  const milestones = active.filter(x=>x.estado==="PROXIMO_HITO").length;
+  const expire = active.filter(x=>x.estado==="PROXIMO_VENCER").length;
+  const urgent = active.filter(x=>x.estado==="URGENTE").length;
+  $("kpiUrgent").textContent = urgent;
+
+  $("sumTotal").textContent = active.length;
+  $("sumEmployees").textContent = new Set(active.map(x=>x.empleado_id).filter(Boolean)).size;
+  $("sumIndef").textContent = indef;
+  $("sumMilestones").textContent = milestones + expire;
+  $("sumUrgent").textContent = urgent;
+  $("priorityUpcoming").textContent = milestones + expire;
+  $("priorityUrgent").textContent = urgent;
+  $("priorityIndef").textContent = indef;
 }
 
 function applyFilters(){
@@ -550,7 +1092,13 @@ function applyFilters(){
       x.tipo_contrato,x.proximo_hito
     ].join(" ").toLowerCase();
 
-    return (!q || haystack.includes(q))
+    let drillOk = true;
+    if(drillMode==="urgent") drillOk = x.estado==="URGENTE";
+    if(drillMode==="upcoming") drillOk = ["PROXIMO_HITO","PROXIMO_VENCER"].includes(x.estado);
+    if(drillMode==="indef") drillOk = (x.tipo_contrato||"").toLowerCase().includes("indefinido");
+
+    return drillOk
+      && (!q || haystack.includes(q))
       && (!type || x.tipo_contrato===type)
       && (!boss || x.jefe_nombre===boss)
       && (!status || x.estado===status);
@@ -607,6 +1155,7 @@ function renderTable(){
 }
 
 function openModal(x){
+  currentContract = x;
   $("modalTitle").textContent = x.empleado_nombre || "Detalle del contrato";
   const details = [
     ["Cargo",x.cargo],
@@ -638,6 +1187,305 @@ function closeModal(){
   $("modalBackdrop").classList.add("hidden");
 }
 
+
+
+function selectedEmployeeContract(){
+  const id = Number($("genEmployee").value);
+  return allContracts.find(x=>Number(x.empleado_id)===id) || null;
+}
+
+function fillGenerationEmployee(){
+  const x = selectedEmployeeContract();
+  if(!x) return;
+  $("genName").value = x.empleado_nombre || "";
+  $("genJob").value = x.cargo || "";
+  $("genSalary").value = x.salario || "";
+  $("genStart").value = x.fecha_inicio || "";
+  $("genEnd").value = x.fecha_fin || "";
+}
+
+function generationData(){
+  return {
+    "Colaborador": $("genName").value,
+    "Identificación": $("genIdNumber").value,
+    "Nacionalidad": $("genNationality").value,
+    "Estado civil": $("genCivil").value,
+    "Profesión": $("genProfession").value,
+    "Cargo": $("genJob").value,
+    "Sueldo": $("genSalary").value ? money($("genSalary").value) : "",
+    "Fecha inicio": $("genStart").value,
+    "Fecha fin / tentativa": $("genEnd").value,
+    "Ciudad de firma": $("genCity").value,
+    "Lugar de trabajo": $("genWorkplace").value,
+    "Horario": [$("genTimeFrom").value,$("genTimeTo").value].filter(Boolean).join(" - "),
+    "Alimentación": $("genBreak").value,
+    "Días de trabajo": $("genWorkDays").value,
+    "Proyecto": $("genProject").value,
+    "Cliente": $("genClient").value,
+    "Referencia contractual": $("genCommercialContract").value,
+    "Fecha contrato comercial": $("genCommercialDate").value,
+    "Culminación tentativa": $("genEstimatedEnd").value,
+    "Alcance": $("genScope").value,
+    "Observaciones": $("genNotes").value
+  };
+}
+
+function previewGeneration(){
+  const template = $("genTemplate").selectedOptions[0]?.textContent || "";
+  const data = generationData();
+  $("genPreview").innerHTML = `<h4>Vista previa — ${esc(template)}</h4><div class="preview-grid">` +
+    Object.entries(data).filter(([,v])=>v).map(([k,v])=>`<div><b>${esc(k)}:</b> ${esc(v)}</div>`).join("") +
+    `</div>`;
+  $("genPreview").classList.add("show");
+}
+
+function clearGeneration(){
+  document.querySelectorAll("#module-generar input,#module-generar textarea").forEach(el=>el.value="");
+  $("genEmployee").value="";
+  $("genTemplate").value="";
+  $("genCivil").value="";
+  $("genNationality").value="Ecuatoriana";
+  $("genCity").value="Guayaquil";
+  $("genPreview").classList.remove("show");
+}
+
+function prepareContract(){
+  const template = $("genTemplate").value;
+  if(!template){alert("Selecciona primero la plantilla o tipo de contrato.");return;}
+  if(!$("genName").value.trim()){alert("Selecciona o escribe el colaborador.");return;}
+  if(["pasantia","sector","eventual"].includes(template)){
+    alert("Esta plantilla todavía no está cargada. Primero debemos incorporar el Word maestro correspondiente.");
+    return;
+  }
+  previewGeneration();
+  alert("Los datos quedaron preparados. El siguiente paso será conectarlos con la plantilla Word maestra para generar el archivo.");
+}
+
+function navigateModule(name){
+  document.querySelectorAll(".nav-btn").forEach(b=>b.classList.toggle("active",b.dataset.module===name));
+  document.querySelectorAll(".module").forEach(m=>m.classList.remove("active"));
+  const target = document.getElementById("module-"+name);
+  if(target) target.classList.add("active");
+  if(name==="vacaciones" && !vacationsLoaded) loadVacations();
+  if(name==="evaluaciones" && !evaluationsLoaded) loadEvaluations();
+  if(name==="comisiones" && !commissionsLoaded) loadCommissionData();
+}
+
+function drillTo(mode){
+  if(mode==="evaluations"){
+    navigateModule("evaluaciones");
+    return;
+  }
+  navigateModule("contratos");
+  drillMode = mode==="all" ? "" : mode;
+  $("searchInput").value = "";
+  $("typeFilter").value = "";
+  $("bossFilter").value = "";
+  $("statusFilter").value = "";
+  applyFilters();
+}
+
+
+function extractVacationRows(payload){
+  if(Array.isArray(payload)) return payload;
+  if(payload && typeof payload==="object"){
+    for(const key of ["data","items","results","vacations","records","value"]){
+      if(Array.isArray(payload[key])) return payload[key];
+    }
+    for(const value of Object.values(payload)){
+      if(Array.isArray(value)) return value;
+    }
+    return [payload];
+  }
+  return [];
+}
+
+function friendlyKey(k){
+  return String(k).replaceAll("_"," ").replace(/([a-z])([A-Z])/g,"$1 $2")
+    .replace(/\b\w/g,c=>c.toUpperCase());
+}
+
+function findField(keys, patterns){
+  return keys.find(k=>patterns.some(p=>p.test(String(k))));
+}
+
+let vacationRows = [];
+let vacationKeys = [];
+
+function renderVacations(){
+  const q = ($("vacSearch")?.value || "").trim().toLowerCase();
+  const rows = vacationRows.filter(r=>!q || Object.values(r||{}).join(" ").toLowerCase().includes(q));
+  $("vacCount").textContent = `${rows.length} registro${rows.length===1?"":"s"}`;
+  $("vacBody").innerHTML = rows.map(r=>"<tr>"+vacationKeys.map(k=>{
+    let v = r?.[k];
+    if(v && typeof v==="object") v = JSON.stringify(v);
+    return `<td>${esc(v ?? "—")}</td>`;
+  }).join("")+"</tr>").join("");
+}
+
+async function loadVacations(){
+  if(!sb) return;
+  $("vacLoading").classList.remove("hidden");
+  $("vacError").classList.add("hidden");
+  $("vacData").classList.add("hidden");
+  $("vacState").textContent = "Consultando";
+
+  const {data,error} = await sb.functions.invoke("vacaciones-energy");
+
+  $("vacLoading").classList.add("hidden");
+
+  if(error){
+    $("vacState").textContent = "Error";
+    $("vacError").classList.remove("hidden");
+    $("vacError").innerHTML = "No se pudo consultar EnergyVacations.<br><small>"+esc(error.message||error)+"</small>";
+    return;
+  }
+
+  vacationRows = extractVacationRows(data).filter(x=>x && typeof x==="object");
+  vacationsLoaded = true;
+
+  if(!vacationRows.length){
+    $("vacTotal").textContent = "0";
+    $("vacEmployees").textContent = "0";
+    $("vacPending").textContent = "0";
+    $("vacApproved").textContent = "0";
+    $("vacDays").textContent = "0";
+    $("vacState").textContent = "Conectado";
+    $("vacUpdated").textContent = new Date().toLocaleString("es-EC");
+    $("vacError").classList.remove("hidden");
+    $("vacError").textContent = "El API respondió correctamente, pero no devolvió registros.";
+    return;
+  }
+
+  const allKeys = [...new Set(vacationRows.flatMap(r=>Object.keys(r)))];
+  const nameKey = findField(allKeys,[/emplead/i,/colaborador/i,/employee/i,/nombre/i,/name/i]);
+  const statusKey = findField(allKeys,[/estado/i,/status/i,/state/i]);
+  const daysKey = findField(allKeys,[/^dias$/i,/d[ií]as/i,/days/i,/daycount/i]);
+  const startKey = findField(allKeys,[/fecha.*inicio/i,/inicio/i,/desde/i,/start/i]);
+  const endKey = findField(allKeys,[/fecha.*fin/i,/fin/i,/hasta/i,/end/i]);
+
+  const priority = [nameKey,statusKey,startKey,endKey,daysKey].filter(Boolean);
+  vacationKeys = [...new Set([...priority,...allKeys])].slice(0,14);
+
+  const people = nameKey ? new Set(vacationRows.map(r=>r[nameKey]).filter(Boolean)).size : "—";
+  let pending = 0, approved = 0;
+  const statusCounts = {};
+  if(statusKey){
+    vacationRows.forEach(r=>{
+      const s = String(r[statusKey] ?? "").trim();
+      if(!s) return;
+      statusCounts[s] = (statusCounts[s]||0)+1;
+      if(/pend|solicit|proceso|pending/i.test(s)) pending++;
+      if(/aprob|autoriz|approved/i.test(s)) approved++;
+    });
+  }
+  const totalDays = daysKey ? vacationRows.reduce((s,r)=>s+(Number(r[daysKey])||0),0) : "—";
+
+  $("vacTotal").textContent = vacationRows.length;
+  $("vacEmployees").textContent = people;
+  $("vacPending").textContent = statusKey ? pending : "—";
+  $("vacApproved").textContent = statusKey ? approved : "—";
+  $("vacDays").textContent = totalDays;
+  $("vacState").textContent = "Conectado";
+  $("vacUpdated").textContent = new Date().toLocaleString("es-EC");
+
+  $("vacStatusPills").innerHTML = Object.entries(statusCounts)
+    .sort((a,b)=>b[1]-a[1]).slice(0,8)
+    .map(([s,n])=>`<span class="status-pill">${esc(s)}: ${n}</span>`).join("");
+
+  $("vacHead").innerHTML = "<tr>"+vacationKeys.map(k=>`<th>${esc(friendlyKey(k))}</th>`).join("")+"</tr>";
+  $("vacData").classList.remove("hidden");
+  renderVacations();
+}
+
+
+function typeFromContract(x){
+  const h=String(x?.proximo_hito||"").toLowerCase();
+  if(h.includes("90")) return "90";
+  if(h.includes("180")) return "180";
+  if(h.includes("360")) return "360";
+  return "fin_contrato";
+}
+function evalLink(token){return location.href.split("?")[0].split("#")[0]+"?evaluacion="+encodeURIComponent(token)}
+async function createOrSendEvaluation(x){
+  if(!x||!x.empleado_id){alert("No se pudo identificar al colaborador.");return;}
+  const tipo=typeFromContract(x);
+  let {data:rows,error:findErr}=await sb.from("alertas_evaluacion").select("*").eq("empleado_id",x.empleado_id).eq("tipo_plazo",tipo).eq("estado","pendiente").order("creado_en",{ascending:false}).limit(1);
+  if(findErr){alert("No se pudo preparar la evaluación: "+findErr.message);return;}
+  let rec=rows?.[0];
+  if(!rec){
+    const payload={empleado_id:x.empleado_id,empleado_nombre:x.empleado_nombre,tipo_plazo:tipo,estado:"pendiente",contrato_id:x.odoo_contract_id||null,jefe_nombre:x.jefe_nombre||null,jefe_email:x.jefe_email||null,enviado_por:(await sb.auth.getUser()).data.user?.email||null};
+    const ins=await sb.from("alertas_evaluacion").insert(payload).select().single();
+    if(ins.error){alert("No se pudo crear la evaluación: "+ins.error.message);return;} rec=ins.data;
+  }
+  const link=evalLink(rec.token);
+  await sb.from("alertas_evaluacion").update({enlace_formulario:link,actualizado_en:new Date().toISOString()}).eq("token",rec.token);
+  const subject=`Evaluación de ${x.empleado_nombre}`;
+  const body=`Hola ${x.jefe_nombre||""},\n\nPor favor completa la evaluación de ${x.empleado_nombre} correspondiente a ${tipo==="fin_contrato"?"fin de contrato":tipo+" días"}.\n\nEnlace: ${link}\n\nGracias.`;
+  if(x.jefe_email) location.href=`mailto:${encodeURIComponent(x.jefe_email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  else {await navigator.clipboard?.writeText(link); alert("El contrato no tiene correo de jefe. El enlace de evaluación fue copiado:\n"+link);}
+  evaluationsLoaded=false;
+}
+async function loadEvaluations(){
+  if(!sb)return; $("evalLoading").classList.remove("hidden");
+  const {data,error}=await sb.from("alertas_evaluacion").select("*").order("creado_en",{ascending:false});
+  $("evalLoading").classList.add("hidden");
+  if(error){$("evalBody").innerHTML=`<tr><td colspan="9">${esc(error.message)}</td></tr>`;return;}
+  evaluations=data||[];evaluationsLoaded=true;renderEvaluations();
+}
+function renderEvaluations(){
+  const q=($("evalSearch")?.value||"").toLowerCase().trim(), st=$("evalStatus")?.value||"";
+  const rows=evaluations.filter(x=>(!st||x.estado===st)&&(!q||[x.empleado_nombre,x.jefe_nombre,x.tipo_plazo,x.decision,x.proxima_alerta].join(" ").toLowerCase().includes(q)));
+  const pending=evaluations.filter(x=>x.estado==="pendiente").length, received=evaluations.filter(x=>x.estado==="recibida").length;
+  $("evalPendingKpi").textContent=pending;$("evalReceivedKpi").textContent=received;$("sumEvaluations").textContent=pending;
+  $("evalContinueKpi").textContent=evaluations.filter(x=>["continuar","renovar","extender_indefinido"].includes(x.decision)).length;
+  $("evalStopKpi").textContent=evaluations.filter(x=>x.decision==="prescindir").length;
+  $("evalBody").innerHTML=rows.map(x=>`<tr><td><b>${esc(x.empleado_nombre)}</b></td><td>${esc(x.tipo_plazo==="fin_contrato"?"Fin contrato":x.tipo_plazo+" días")}</td><td>${esc(x.jefe_nombre||"—")}</td><td><span class="badge ${x.estado==="recibida"?"ACTIVO":"PROXIMO_HITO"}">${esc(x.estado)}</span></td><td>${x.fecha_recibida?new Date(x.fecha_recibida).toLocaleDateString("es-EC"):"—"}</td><td>${esc(x.decision||"—")}</td><td>${esc(x.proxima_alerta||"—")}</td><td>${x.archivo_url?`<button class="btn-mini blue" data-eval-open="${x.token}">Abrir</button>`:"—"}</td><td><button class="btn-mini green" data-eval-send="${x.token}">Enviar enlace</button> <button class="btn-mini" data-eval-upload="${x.token}">Subir</button> <button class="btn-mini" data-eval-manage="${x.token}">Gestionar</button></td></tr>`).join("")||'<tr><td colspan="9">No hay evaluaciones para este filtro.</td></tr>';
+  document.querySelectorAll("[data-eval-send]").forEach(b=>b.onclick=()=>resendEval(b.dataset.evalSend));
+  document.querySelectorAll("[data-eval-upload]").forEach(b=>b.onclick=()=>{selectedEvalToken=b.dataset.evalUpload;$("evalFileInput").click()});
+  document.querySelectorAll("[data-eval-manage]").forEach(b=>b.onclick=()=>openEvalManager(b.dataset.evalManage));
+  document.querySelectorAll("[data-eval-open]").forEach(b=>b.onclick=()=>openEvalFile(b.dataset.evalOpen));
+}
+async function resendEval(token){const x=evaluations.find(e=>e.token===token);if(!x)return;const link=x.enlace_formulario||evalLink(token);await navigator.clipboard?.writeText(link);if(x.jefe_email){const subj=`Evaluación de ${x.empleado_nombre}`,body=`Hola ${x.jefe_nombre||""},\n\nPor favor completa la evaluación de ${x.empleado_nombre}:\n${link}\n\nGracias.`;location.href=`mailto:${encodeURIComponent(x.jefe_email)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;}else alert("Enlace copiado:\n"+link)}
+async function uploadEvaluationFile(file,token){if(!file||!token)return;const x=evaluations.find(e=>e.token===token);const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");const path=`${x?.empleado_id||"sin_id"}/${token}/${Date.now()}_${safe}`;const up=await sb.storage.from("evaluaciones-rrhh").upload(path,file,{upsert:false});if(up.error){alert("No se pudo subir el archivo: "+up.error.message);return;}const upd=await sb.from("alertas_evaluacion").update({archivo_url:path,estado:"recibida",fecha_recibida:new Date().toISOString(),actualizado_en:new Date().toISOString()}).eq("token",token);if(upd.error){alert(upd.error.message);return;}evaluationsLoaded=false;await loadEvaluations();alert("Evaluación subida correctamente.")}
+async function openEvalFile(token){const x=evaluations.find(e=>e.token===token);if(!x?.archivo_url)return;const {data,error}=await sb.storage.from("evaluaciones-rrhh").createSignedUrl(x.archivo_url,300);if(error){alert(error.message);return;}window.open(data.signedUrl,"_blank")}
+function openEvalManager(token){const x=evaluations.find(e=>e.token===token);if(!x)return;selectedEvalToken=token;$("evalModalTitle").textContent="Evaluación — "+x.empleado_nombre;$("evalEditDecision").value=x.decision||"";$("evalEditPerformance").value=x.desempeno||"";$("evalEditEvaluator").value=x.evaluador_nombre||"";$("evalEditComments").value=x.comentarios||"";$("evalEditNext").value=x.proxima_alerta||"";$("evalModalBackdrop").classList.remove("hidden")}
+async function saveEvalManager(){if(!selectedEvalToken)return;const decision=$("evalEditDecision").value||null;let next=$("evalEditNext").value.trim();if(!next&&decision){next={renovar:"Preparar renovación contractual",extender_indefinido:"Preparar contrato indefinido",prescindir:"Iniciar proceso de salida / no renovación",continuar:"Continuar seguimiento"}[decision]||""}const payload={decision,desempeno:$("evalEditPerformance").value.trim()||null,evaluador_nombre:$("evalEditEvaluator").value.trim()||null,comentarios:$("evalEditComments").value.trim()||null,proxima_alerta:next||null,actualizado_en:new Date().toISOString()};if(decision){payload.estado="recibida";payload.fecha_recibida=new Date().toISOString()}const {error}=await sb.from("alertas_evaluacion").update(payload).eq("token",selectedEvalToken);if(error){alert(error.message);return;}$("evalModalBackdrop").classList.add("hidden");evaluationsLoaded=false;await loadEvaluations()}
+
+async function loadPublicEvaluation(token){
+  $("loginView").classList.add("hidden");$("appView").classList.add("hidden");$("publicEvalView").classList.remove("hidden");
+  const {data,error}=await sb.rpc("obtener_evaluacion_publica",{p_token:token});
+  if(error||!data?.length){$("pubEvalIntro").textContent="El enlace no es válido o la evaluación ya no está disponible.";return;}
+  const x=data[0];$("pubEvalTitle").textContent="Evaluación de "+x.empleado_nombre;$("pubEvalIntro").textContent=`Hito: ${x.tipo_plazo==="fin_contrato"?"Fin de contrato":x.tipo_plazo+" días"}. Completa la decisión y observaciones para que RRHH continúe el proceso.`;$("pubEvalForm").classList.remove("hidden");
+  $("pubSubmitBtn").onclick=async()=>{const dec=$("pubDecision").value;if(!dec||!$("pubEvaluator").value.trim()){$("pubEvalMsg").className="status-note err";$("pubEvalMsg").textContent="Completa tu nombre y la decisión.";return;}$("pubSubmitBtn").disabled=true;const r=await sb.rpc("guardar_evaluacion_publica",{p_token:token,p_decision:dec,p_desempeno:$("pubPerformance").value,p_comentarios:$("pubComments").value,p_evaluador_nombre:$("pubEvaluator").value});$("pubSubmitBtn").disabled=false;if(r.error){$("pubEvalMsg").className="status-note err";$("pubEvalMsg").textContent="No se pudo enviar: "+r.error.message;return;}$("pubEvalMsg").className="status-note ok";$("pubEvalMsg").textContent="Evaluación enviada correctamente. Gracias.";$("pubSubmitBtn").classList.add("hidden")}
+}
+
+function num(v){return Number(v||0)}
+function pctText(v){return Number.isFinite(v)?v.toLocaleString("es-EC",{minimumFractionDigits:1,maximumFractionDigits:1})+"%":"—"}
+async function ensureOpsSession(){if(!opsSb)return false;const {data}=await opsSb.auth.getSession();if(data.session)return true;const email=(await sb.auth.getUser()).data.user?.email;if(!email)return false;const pw=prompt("Para conectar la fuente financiera, ingresa tu contraseña del dashboard de Operaciones para "+email+":");if(!pw)return false;const r=await opsSb.auth.signInWithPassword({email,password:pw});if(r.error){alert("No se pudo conectar la fuente financiera: "+r.error.message);return false;}return true}
+async function loadCommissionData(){
+  if(!await ensureOpsSession()){commissionsLoaded=false;$("commConnection").className="status-note err";$("commConnection").textContent="Fuente financiera no conectada. Pulsa Actualizar datos para intentar nuevamente.";return;}
+  $("commConnection").className="status-note";$("commConnection").textContent="Consultando fuente financiera...";
+  const [pr,inv]=await Promise.all([opsSb.from("vw_dashboard_operaciones").select("*").order("proyecto"),opsSb.from("facturas_servicio").select("*").order("fecha_factura",{ascending:false})]);
+  if(pr.error||inv.error){$("commConnection").className="status-note err";$("commConnection").textContent="No se pudieron consultar datos financieros: "+esc(pr.error?.message||inv.error?.message||"");return;}
+  opsProjects=pr.data||[];opsInvoices=inv.data||[];commissionsLoaded=true;$("commConnection").className="status-note ok";$("commConnection").textContent=`Fuente financiera conectada · ${opsProjects.length} proyectos · ${opsInvoices.length} facturas.`;
+  $("commProject").innerHTML='<option value="">Selecciona una PO...</option>'+opsProjects.map(x=>`<option value="${esc(x.proyecto)}">PO ${esc(x.proyecto)} · ${esc(x.proyecto_nombre||"")}</option>`).join("");
+  if(!$("commPeriod").value){const d=new Date();$("commPeriod").value=d.toISOString().slice(0,7)}
+  await loadSavedCommissions();
+}
+function invoicesForProject(po){const p=opsProjects.find(x=>String(x.proyecto)===String(po));const needles=[String(po),String(p?.proyecto_nombre||"")].filter(x=>x.length>=3).map(x=>x.toLowerCase());return opsInvoices.filter(f=>{const txt=[f.analitica,f.orden_venta].join(" ").toLowerCase();return needles.some(n=>txt.includes(n))})}
+function renderCommissionProject(){const po=$("commProject").value,p=opsProjects.find(x=>String(x.proyecto)===String(po));if(!p){clearCommissionView();return;}const invs=invoicesForProject(po),bt=$("commBaseType").value;$("commClient").value=[...new Set(invs.map(x=>x.cliente).filter(Boolean))].join(" / ");$("commAnalytic").value=[...new Set(invs.map(x=>x.analitica).filter(Boolean))].join(" / ")||p.proyecto_nombre||"";$("commInvoiceBody").innerHTML=invs.map(f=>{const checked=bt==="cobrado"?num(f.monto_pagado)>0:true;return `<tr><td class="center"><input class="invoice-check" type="checkbox" data-invoice="${f.odoo_id}" ${checked?"checked":""}></td><td>${esc(f.factura||"—")}</td><td>${esc(f.cliente||"—")}</td><td>${esc(f.analitica||"—")}</td><td>${esc(f.vendedor||"—")}</td><td class="right">${money(f.monto_total)}</td><td class="right">${money(f.monto_pagado)}</td><td class="right">${money(f.saldo_pendiente)}</td></tr>`}).join("")||'<tr><td colspan="8">No se encontraron facturas asociadas a esta PO.</td></tr>';document.querySelectorAll("[data-invoice]").forEach(c=>c.onchange=recalcCommission);const expected=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.presupuesto_aterrizado))/num(p.monto_contrato)*100:NaN, real=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.real_ejecutado))/num(p.monto_contrato)*100:NaN;$("commSale").textContent=money(p.monto_contrato);$("commMarginExpected").textContent=pctText(expected);$("commMarginReal").textContent=pctText(real);if(!$("commParticipants").children.length)addParticipant();recalcCommission()}
+function selectedInvoices(){const ids=[...document.querySelectorAll("[data-invoice]:checked")].map(x=>Number(x.dataset.invoice));return opsInvoices.filter(x=>ids.includes(Number(x.odoo_id)))}
+function recalcCommission(){const po=$("commProject").value,p=opsProjects.find(x=>String(x.proyecto)===String(po));if(!p)return;const selected=selectedInvoices(),fact=selected.reduce((a,x)=>a+num(x.monto_total),0),paid=selected.reduce((a,x)=>a+num(x.monto_pagado),0),pend=selected.reduce((a,x)=>a+num(x.saldo_pendiente),0),bt=$("commBaseType").value,base=bt==="venta"?num(p.monto_contrato):bt==="facturado"?fact:paid;$("commInvoiced").textContent=money(fact);$("commPaid").textContent=money(paid);$("commPending").textContent=money(pend);$("commBase").value=money(base);$("commDocs").value=selected.length;$("commGross").value=money(base*num($("commPct").value)/100);document.querySelectorAll(".participant-row").forEach(row=>{const rate=num(row.querySelector(".part-pct").value),gross=base*rate/100,iess=gross*.0945,net=gross-iess;row.querySelector(".part-gross").value=money(gross);row.querySelector(".part-iess").value=money(iess);row.querySelector(".part-net").value=money(net)});const rows=[...document.querySelectorAll(".participant-row")],tg=rows.reduce((a,r)=>a+parseMoney(r.querySelector(".part-gross").value),0),ti=rows.reduce((a,r)=>a+parseMoney(r.querySelector(".part-iess").value),0);$("commTotalGross").textContent=money(tg);$("commTotalIess").textContent=money(ti);$("commTotalNet").textContent=money(tg-ti)}
+function parseMoney(v){return Number(String(v||"").replace(/[^0-9,.-]/g,"").replace(/\./g,"").replace(",","."))||0}
+function clearCommissionView(){["commClient","commAnalytic","commBase","commGross","commDocs"].forEach(id=>$(id).value="");["commSale","commInvoiced","commPaid","commPending","commTotalGross","commTotalIess","commTotalNet"].forEach(id=>$(id).textContent=money(0));$("commMarginExpected").textContent=$("commMarginReal").textContent="—";$("commInvoiceBody").innerHTML="";$("commParticipants").innerHTML=""}
+function employeeOptions(){const seen=new Set();return allContracts.filter(x=>x.empleado_id&&!seen.has(x.empleado_id)&&seen.add(x.empleado_id)).sort((a,b)=>(a.empleado_nombre||"").localeCompare(b.empleado_nombre||"","es")).map(x=>`<option value="${x.empleado_id}">${esc(x.empleado_nombre)}</option>`).join("")}
+function addParticipant(){const div=document.createElement("div");div.className="participant-row";div.innerHTML=`<div class="field-lite wide-part"><label>Empleado</label><select class="part-emp"><option value="">Selecciona...</option>${employeeOptions()}</select></div><div class="field-lite"><label>% participación</label><input class="part-pct" type="number" step="0.01" min="0" value="${num($("commPct").value)||5}"></div><div class="field-lite"><label>Comisión</label><input class="part-gross" readonly></div><div class="field-lite"><label>IESS 9,45%</label><input class="part-iess" readonly></div><div class="field-lite"><label>Neto</label><input class="part-net" readonly></div><button class="btn-mini" type="button">Quitar</button>`;div.querySelector(".part-pct").oninput=recalcCommission;div.querySelector("button").onclick=()=>{div.remove();recalcCommission()};$("commParticipants").appendChild(div);recalcCommission()}
+async function saveCommission(){const po=$("commProject").value,p=opsProjects.find(x=>String(x.proyecto)===String(po));if(!p){alert("Selecciona una PO.");return;}const participants=[...document.querySelectorAll(".participant-row")].map(r=>{const sel=r.querySelector(".part-emp"),contract=allContracts.find(x=>String(x.empleado_id)===sel.value);return {empleado_id:contract?.empleado_id||null,empleado_nombre:contract?.empleado_nombre||sel.selectedOptions[0]?.textContent||"",pct_participacion:num(r.querySelector(".part-pct").value),comision_bruta:parseMoney(r.querySelector(".part-gross").value),iess_pct:9.45,iess_valor:parseMoney(r.querySelector(".part-iess").value),neto_pagar:parseMoney(r.querySelector(".part-net").value)}}).filter(x=>x.empleado_nombre&&x.empleado_nombre!=="Selecciona...");if(!participants.length){alert("Agrega al menos un empleado.");return;}const selected=selectedInvoices(),fact=selected.reduce((a,x)=>a+num(x.monto_total),0),paid=selected.reduce((a,x)=>a+num(x.monto_pagado),0),pend=selected.reduce((a,x)=>a+num(x.saldo_pendiente),0),bt=$("commBaseType").value,base=bt==="venta"?num(p.monto_contrato):bt==="facturado"?fact:paid,expected=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.presupuesto_aterrizado))/num(p.monto_contrato)*100:null,real=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.real_ejecutado))/num(p.monto_contrato)*100:null,period=($("commPeriod").value||new Date().toISOString().slice(0,7))+"-01";const calc={periodo:period,proyecto:String(po),proyecto_nombre:p.proyecto_nombre||null,cliente:$("commClient").value||null,analitica:$("commAnalytic").value||null,facturas_incluidas:selected.map(x=>x.odoo_id),base_tipo:bt,valor_venta:num(p.monto_contrato),total_facturado:fact,total_cobrado:paid,saldo_pendiente:pend,margen_esperado:expected,margen_real:real,pct_comision:num($("commPct").value),base_comision:base,comision_bruta:participants.reduce((a,x)=>a+x.comision_bruta,0),incluir_pago:$("commInclude").value==="1"};const ins=await sb.from("comisiones_calculos").insert(calc).select().single();if(ins.error){alert(ins.error.message);return;}participants.forEach(x=>x.calculo_id=ins.data.id);const pi=await sb.from("comisiones_participantes").insert(participants);if(pi.error){alert("Cálculo guardado, pero fallaron participantes: "+pi.error.message);return;}alert("Cálculo de comisión guardado.");await loadSavedCommissions()}
+async function loadSavedCommissions(){const {data,error}=await sb.from("comisiones_calculos").select("*,comisiones_participantes(*)").order("creado_en",{ascending:false}).limit(100);if(error){$("commSaved").textContent=error.message;return;}$("commSaved").innerHTML=(data||[]).map(x=>`<div class="saved-card"><b>${dateEC(x.periodo)} · PO ${esc(x.proyecto)} · ${esc(x.cliente||"")}</b><div class="muted" style="margin-top:4px">Base: ${esc(x.base_tipo)} ${money(x.base_comision)} · Comisión: ${money(x.comision_bruta)} · ${x.incluir_pago?"Incluida en pago":"No incluida"}</div><div style="margin-top:5px">${(x.comisiones_participantes||[]).map(p=>`${esc(p.empleado_nombre)}: ${p.pct_participacion}% → <b>${money(p.neto_pagar)}</b>`).join(" · ")}</div></div>`).join("")||"Sin cálculos guardados."}
+function exportCommissionExcel(){const po=$("commProject").value,p=opsProjects.find(x=>String(x.proyecto)===String(po));if(!p)return alert("Selecciona una PO.");const selected=selectedInvoices();const wb=XLSX.utils.book_new();const resumen=[['Orden de Trabajo','PO '+po],['Proyecto',p.proyecto_nombre||''],['Cliente',$("commClient").value],['Cuenta analítica',$("commAnalytic").value],['Valor de Contrato',num(p.monto_contrato)],['Facturado seleccionado',selected.reduce((a,x)=>a+num(x.monto_total),0)],['Cobrado seleccionado',selected.reduce((a,x)=>a+num(x.monto_pagado),0)],['Saldo pendiente',selected.reduce((a,x)=>a+num(x.saldo_pendiente),0)],['Margen esperado',$("commMarginExpected").textContent],['Margen real',$("commMarginReal").textContent],['Base comisión',parseMoney($("commBase").value)]];XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(resumen),'Resumen');const parts=[['Empleado','% Participación','Valor Comisiones','9,45%','Valor Neto a Pagar']];document.querySelectorAll('.participant-row').forEach(r=>parts.push([r.querySelector('.part-emp').selectedOptions[0]?.textContent||'',num(r.querySelector('.part-pct').value),parseMoney(r.querySelector('.part-gross').value),parseMoney(r.querySelector('.part-iess').value),parseMoney(r.querySelector('.part-net').value)]));XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(parts),'Comisiones');const fac=[['Factura','Cliente','Analítica','Vendedor','Facturado','Cobrado','Pendiente'],...selected.map(f=>[f.factura,f.cliente,f.analitica,f.vendedor,num(f.monto_total),num(f.monto_pagado),num(f.saldo_pendiente)])];XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(fac),'Facturas');XLSX.writeFile(wb,`Comisiones_PO_${po}_${$("commPeriod").value||"periodo"}.xlsx`)}
+
+
 function exportCSV(){
   const cols = [
     ["empleado_nombre","Colaborador"],["cargo","Cargo"],["jefe_nombre","Jefe"],
@@ -662,6 +1510,8 @@ function exportCSV(){
 
 document.addEventListener("DOMContentLoaded", async ()=>{
   const ready = initSupabase();
+  const publicToken = new URLSearchParams(location.search).get("evaluacion");
+  if(ready && publicToken){ await loadPublicEvaluation(publicToken); return; }
 
   $("loginBtn").addEventListener("click",login);
   $("password").addEventListener("keydown",e=>{if(e.key==="Enter") login();});
@@ -670,9 +1520,51 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   $("exportBtn").addEventListener("click",exportCSV);
   $("modalClose").addEventListener("click",closeModal);
   $("modalBackdrop").addEventListener("click",e=>{if(e.target.id==="modalBackdrop") closeModal();});
+  $("modalEvalBtn").addEventListener("click",()=>createOrSendEvaluation(currentContract));
+  $("evalRefreshBtn").addEventListener("click",()=>{evaluationsLoaded=false;loadEvaluations()});
+  $("evalSearch").addEventListener("input",renderEvaluations);
+  $("evalStatus").addEventListener("change",renderEvaluations);
+  $("evalFileInput").addEventListener("change",e=>{const f=e.target.files?.[0];if(f)uploadEvaluationFile(f,selectedEvalToken);e.target.value=""});
+  $("evalModalClose").addEventListener("click",()=>$("evalModalBackdrop").classList.add("hidden"));
+  $("evalModalBackdrop").addEventListener("click",e=>{if(e.target.id==="evalModalBackdrop")$("evalModalBackdrop").classList.add("hidden")});
+  $("evalModalSave").addEventListener("click",saveEvalManager);
+  $("evalModalUpload").addEventListener("click",()=>$("evalFileInput").click());
+  $("commRefreshBtn").addEventListener("click",()=>{commissionsLoaded=false;loadCommissionData()});
+  $("commProject").addEventListener("change",renderCommissionProject);
+  $("commBaseType").addEventListener("change",renderCommissionProject);
+  $("commPct").addEventListener("input",()=>{document.querySelectorAll(".part-pct").forEach(x=>{if(!x.dataset.touched)x.value=$("commPct").value});recalcCommission()});
+  $("commAddParticipant").addEventListener("click",addParticipant);
+  $("commSaveBtn").addEventListener("click",saveCommission);
+  $("commExcelBtn").addEventListener("click",exportCommissionExcel);
+  $("commPrintBtn").addEventListener("click",()=>window.print());
+
+  document.querySelectorAll(".nav-btn").forEach(btn=>{
+    btn.addEventListener("click",()=>navigateModule(btn.dataset.module));
+  });
+
+  document.querySelectorAll(".kpi.clickable[data-drill]").forEach(card=>{
+    card.addEventListener("click",()=>drillTo(card.dataset.drill));
+  });
+
+  $("vacRefreshBtn").addEventListener("click",()=>{
+    vacationsLoaded = false;
+    loadVacations();
+  });
+
+  $("genEmployee").addEventListener("change",fillGenerationEmployee);
+  $("genPreviewBtn").addEventListener("click",previewGeneration);
+  $("genClearBtn").addEventListener("click",clearGeneration);
+  $("genWordBtn").addEventListener("click",prepareContract);
+  $("vacSearch").addEventListener("input",renderVacations);
 
   ["searchInput","typeFilter","bossFilter","statusFilter"].forEach(id=>{
-    $(id).addEventListener(id==="searchInput"?"input":"change",applyFilters);
+    const el = $(id);
+    const eventName = id==="searchInput" ? "input" : "change";
+    el.addEventListener(eventName,()=>{
+      if(id!=="searchInput" || el.value!=="") drillMode="";
+      if(id!=="searchInput") drillMode="";
+      applyFilters();
+    });
   });
 
   document.querySelectorAll("thead th[data-sort]").forEach(th=>{
