@@ -335,7 +335,7 @@
     .status-note{padding:10px 12px;border-radius:10px;background:#f8fafc;color:var(--muted);font-size:13px}
     .status-note.ok{background:#eef8df;color:#527d00}.status-note.err{background:#fff1f2;color:#b91c1c}.status-note.warn{background:#fff8e6;color:#8a5a00}
     .saved-card{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;position:relative}
-    .saved-card .btn-mini.danger{position:absolute;top:10px;right:10px}
+    .saved-card-actions{position:absolute;top:10px;right:10px;display:flex;gap:6px}
     .part-warning{grid-column:1/-1;background:#fff8e6;color:#8a5a00;border-radius:8px;padding:6px 10px;font-size:12px;margin-top:-4px}
     .eval-table-wrap,.commission-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px;background:#fff}
     .eval-table,.commission-table{width:100%;border-collapse:collapse;min-width:980px}
@@ -1723,7 +1723,7 @@ async function loadSavedCommissions(){
 }
 function commissionCardHTML(x){
   return `<div class="saved-card">
-    <div style="position:absolute;top:10px;right:10px;display:flex;gap:6px">
+    <div class="saved-card-actions">
       <button class="btn-mini blue" data-edit-calc="${x.id}">Editar</button>
       <button class="btn-mini danger" data-delete-calc="${x.id}">Eliminar</button>
     </div>
