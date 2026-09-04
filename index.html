@@ -1628,7 +1628,7 @@ function renderSavedCommissions(){
     <div style="margin-top:5px">${(x.comisiones_participantes||[]).map(p=>`${esc(p.empleado_nombre)}: ${p.pct_participacion}% → <b>${money(p.neto_pagar)}</b>`).join(" · ")}</div>
   </div>`).join("")||"Sin cálculos guardados.";
   document.querySelectorAll("[data-delete-calc]").forEach(btn=>{
-    btn.addEventListener("click",()=>deleteSavedCommission(Number(btn.dataset.deleteCalc)));
+    btn.addEventListener("click",()=>deleteSavedCommission(btn.dataset.deleteCalc));
   });
 }
 async function deleteSavedCommission(id){
@@ -1655,21 +1655,25 @@ function checkExistingCommissionForPO(p){
   box.innerHTML="⚠ Ya existe"+(existentes.length>1?"n "+existentes.length+" cálculos":" un cálculo")+" guardado(s) para la PO "+esc(p.proyecto)+":<br>"+
     existentes.map(x=>`${dateEC(x.periodo)} · Comisión bruta ${money(x.comision_bruta)} · ${x.incluir_pago?"<b>ya incluida en pago</b>":"no incluida en pago aún"}`).join("<br>");
 }
+function anticipoPendiente(nombre){
+  let total=0;
+  (savedCommissions||[]).forEach(calc=>{
+    if(calc.incluir_pago) return; // ya incluida/pagada, no cuenta como pendiente
+    (calc.comisiones_participantes||[]).forEach(part=>{
+      if(part.empleado_nombre===nombre) total+=num(part.neto_pagar);
+    });
+  });
+  return total;
+}
 function checkEmployeeAdvance(select){
   const row=select.closest(".participant-row");
   row.querySelector(".part-warning")?.remove();
   const nombre=select.selectedOptions[0]?.textContent;
   if(!nombre||nombre==="Selecciona...")return;
-  const pendientes=[];
-  (savedCommissions||[]).forEach(calc=>{
-    if(calc.incluir_pago) return; // ya pagada/incluida, no cuenta como pendiente
-    (calc.comisiones_participantes||[]).forEach(part=>{
-      if(part.empleado_nombre===nombre) pendientes.push({po:calc.proyecto,neto:part.neto_pagar});
-    });
-  });
-  if(!pendientes.length) return;
-  const total=pendientes.reduce((a,x)=>a+num(x.neto),0);
-  const detalle=pendientes.map(x=>"PO "+esc(x.po)+": "+money(x.neto)).join(" · ");
+  const total=anticipoPendiente(nombre);
+  if(!total) return;
+  const detalle=(savedCommissions||[]).filter(c=>!c.incluir_pago&&(c.comisiones_participantes||[]).some(p=>p.empleado_nombre===nombre))
+    .map(c=>"PO "+esc(c.proyecto)+": "+money((c.comisiones_participantes||[]).filter(p=>p.empleado_nombre===nombre).reduce((a,p)=>a+num(p.neto_pagar),0))).join(" · ");
   const warn=document.createElement("div");
   warn.className="part-warning";
   warn.innerHTML=`⚠ ${esc(nombre)} tiene ${money(total)} en comisiones ya calculadas y no marcadas como pagadas (${detalle}).`;
@@ -1686,13 +1690,20 @@ function printCommission(){
   if(!p){alert("Escribe o elige una PO con datos cargados antes de generar el reporte.");return;}
   const po = p.proyecto;
   const invs = selectedInvoices();
-  const rows = [...document.querySelectorAll(".participant-row")].map(r=>({
-    nombre: r.querySelector(".part-emp").selectedOptions[0]?.textContent || "—",
-    pct: r.querySelector(".part-pct").value,
-    gross: r.querySelector(".part-gross").value,
-    iess: r.querySelector(".part-iess").value,
-    net: r.querySelector(".part-net").value
-  })).filter(r=>r.nombre && r.nombre!=="Selecciona...");
+  const rows = [...document.querySelectorAll(".participant-row")].map(r=>{
+    const nombre = r.querySelector(".part-emp").selectedOptions[0]?.textContent || "—";
+    const net = r.querySelector(".part-net").value;
+    const anticipo = anticipoPendiente(nombre);
+    return {
+      nombre,
+      pct: r.querySelector(".part-pct").value,
+      gross: r.querySelector(".part-gross").value,
+      iess: r.querySelector(".part-iess").value,
+      net,
+      anticipo,
+      neto_final: parseMoney(net) - anticipo
+    };
+  }).filter(r=>r.nombre && r.nombre!=="Selecciona...");
   const hoy = new Date().toLocaleDateString("es-EC",{year:"numeric",month:"long",day:"numeric"});
   const pendiente = $("commPending").textContent;
   $("printArea").innerHTML = `
@@ -1728,15 +1739,17 @@ function printCommission(){
     </table>
     <div class="print-section-title">Participación por colaborador</div>
     <table class="print-table">
-      <thead><tr><th>Colaborador</th><th class="num">% Participación</th><th class="num">Comisión bruta</th><th class="num">IESS 9,45%</th><th class="num">Neto a pagar</th></tr></thead>
+      <thead><tr><th>Colaborador</th><th class="num">% Participación</th><th class="num">Comisión bruta</th><th class="num">IESS 9,45%</th><th class="num">Neto calculado</th><th class="num">Anticipo pendiente</th><th class="num">Neto a pagar</th></tr></thead>
       <tbody>
-        ${rows.map(r=>`<tr><td>${esc(r.nombre)}</td><td class="num">${esc(r.pct)}%</td><td class="num">${esc(r.gross)}</td><td class="num">${esc(r.iess)}</td><td class="num">${esc(r.net)}</td></tr>`).join("") || '<tr><td colspan="5">Sin colaboradores agregados.</td></tr>'}
+        ${rows.map(r=>`<tr><td>${esc(r.nombre)}</td><td class="num">${esc(r.pct)}%</td><td class="num">${esc(r.gross)}</td><td class="num">${esc(r.iess)}</td><td class="num">${esc(r.net)}</td><td class="num">${r.anticipo?money(r.anticipo):"—"}</td><td class="num"><b>${money(r.neto_final)}</b></td></tr>`).join("") || '<tr><td colspan="7">Sin colaboradores agregados.</td></tr>'}
       </tbody>
     </table>
+    ${rows.some(r=>r.anticipo>0) ? '<div class="status-note-print" style="font-size:11px;color:var(--muted);margin:-6px 0 14px">Anticipo pendiente = comisiones ya calculadas en otras PO que aún no están marcadas como "incluida en pago".</div>' : ''}
     <div class="print-totals">
       <div>Comisión bruta total: <b>${esc($("commTotalGross").textContent)}</b></div>
       <div>IESS: <b>${esc($("commTotalIess").textContent)}</b></div>
-      <div>Neto total: <b>${esc($("commTotalNet").textContent)}</b></div>
+      <div>Anticipos a descontar: <b>${money(rows.reduce((a,r)=>a+r.anticipo,0))}</b></div>
+      <div>Neto total a pagar: <b>${money(rows.reduce((a,r)=>a+r.neto_final,0))}</b></div>
     </div>
     <div class="print-sign">
       <div>Elaborado por</div>
