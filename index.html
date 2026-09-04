@@ -1008,6 +1008,7 @@ let opsInvoices = [];
 let commissionsLoaded = false;
 let savedCommissions = [];
 let editingCalcId = null;
+let anticiposComisiones = {};
 let rolesLoaded = false;
 let allRoles = [];
 
@@ -1591,9 +1592,13 @@ async function ensureOpsSession(){if(!opsSb)return false;const {data}=await opsS
 async function loadCommissionData(){
   if(!await ensureOpsSession()){commissionsLoaded=false;$("commConnection").className="status-note err";$("commConnection").textContent="Fuente financiera no conectada. Pulsa Actualizar datos para intentar nuevamente.";return;}
   $("commConnection").className="status-note";$("commConnection").textContent="Consultando fuente financiera...";
-  const [pr,inv]=await Promise.all([opsSb.from("vw_dashboard_operaciones").select("*").order("proyecto"),opsSb.from("facturas_servicio").select("*").order("fecha_factura",{ascending:false})]);
+  const [pr,inv,ant]=await Promise.all([opsSb.from("vw_dashboard_operaciones").select("*").order("proyecto"),opsSb.from("facturas_servicio").select("*").order("fecha_factura",{ascending:false}),opsSb.from("anticipos_comisiones").select("*")]);
   if(pr.error||inv.error){$("commConnection").className="status-note err";$("commConnection").textContent="No se pudieron consultar datos financieros: "+esc(pr.error?.message||inv.error?.message||"");return;}
-  opsProjects=pr.data||[];opsInvoices=inv.data||[];commissionsLoaded=true;$("commConnection").className="status-note ok";$("commConnection").textContent=`Fuente financiera conectada · ${opsProjects.length} proyectos · ${opsInvoices.length} facturas.`;
+  opsProjects=pr.data||[];opsInvoices=inv.data||[];commissionsLoaded=true;
+  anticiposComisiones={};
+  (ant.data||[]).forEach(a=>{if(a.empleado_nombre)anticiposComisiones[a.empleado_nombre.trim().toLowerCase()]=num(a.saldo_anticipo)});
+  const anticipoTexto=ant.error?" (sin datos de anticipo: "+ant.error.message+")":` · ${(ant.data||[]).length} saldos de anticipo`;
+  $("commConnection").className="status-note ok";$("commConnection").textContent=`Fuente financiera conectada · ${opsProjects.length} proyectos · ${opsInvoices.length} facturas${anticipoTexto}.`;
   const trackedCodes=new Set(opsProjects.map(x=>String(x.proyecto)));
   const extraCodes={};
   opsInvoices.forEach(f=>{const code=poFromText(f.orden_venta)||poFromText(f.analitica);if(code&&!trackedCodes.has(code)&&!extraCodes[code])extraCodes[code]=f.cliente||f.analitica||"";});
@@ -1623,16 +1628,25 @@ function employeeOptions(){const seen=new Set();return allContracts.filter(x=>x.
 function addParticipant(prefill){
   const div=document.createElement("div");
   div.className="participant-row";
-  div.innerHTML=`<div class="field-lite wide-part"><label>Empleado</label><select class="part-emp"><option value="">Selecciona...</option>${employeeOptions()}</select></div><div class="field-lite"><label>% participación</label><input class="part-pct" type="number" step="0.01" min="0" value="${num($("commPct").value)||5}"></div><div class="field-lite"><label>Comisión</label><input class="part-gross" readonly></div><div class="field-lite"><label>IESS 9,45%</label><input class="part-iess" readonly></div><div class="field-lite"><label>Neto</label><input class="part-net" readonly></div><button class="btn-mini" type="button">Quitar</button><div class="part-anticipo-row" style="grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:-4px"><label style="display:flex;gap:6px;align-items:center">Anticipo a descontar (revisar cuenta 1010205020208 en Odoo): <input class="part-anticipo-input" type="number" step="0.01" min="0" value="0" style="width:100px;padding:5px;border:1px solid #d7dee9;border-radius:6px"></label><b class="part-neto-final" style="color:var(--navy)"></b></div>`;
+  div.innerHTML=`<div class="field-lite wide-part"><label>Empleado</label><select class="part-emp"><option value="">Selecciona...</option>${employeeOptions()}</select></div><div class="field-lite"><label>% participación</label><input class="part-pct" type="number" step="0.01" min="0" value="${num($("commPct").value)||5}"></div><div class="field-lite"><label>Comisión</label><input class="part-gross" readonly></div><div class="field-lite"><label>IESS 9,45%</label><input class="part-iess" readonly></div><div class="field-lite"><label>Neto</label><input class="part-net" readonly></div><button class="btn-mini" type="button">Quitar</button><div class="part-anticipo-row" style="grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:-4px"><label style="display:flex;gap:6px;align-items:center">Anticipo a descontar (autocompletado de la cuenta 1010205020208, editable): <input class="part-anticipo-input" type="number" step="0.01" min="0" value="0" style="width:100px;padding:5px;border:1px solid #d7dee9;border-radius:6px"></label><b class="part-neto-final" style="color:var(--navy)"></b></div>`;
   div.querySelector(".part-pct").oninput=recalcCommission;
   div.querySelector(".part-anticipo-input").oninput=recalcCommission;
+  div.querySelector(".part-emp").addEventListener("change",e=>autofillAnticipo(e.target));
   div.querySelector("button").onclick=()=>{div.remove();recalcCommission()};
   $("commParticipants").appendChild(div);
   if(prefill){
     const sel=div.querySelector(".part-emp");
     [...sel.options].forEach(o=>{if(o.textContent===prefill.nombre)sel.value=o.value;});
     div.querySelector(".part-pct").value=prefill.pct||5;
+    autofillAnticipo(sel);
   }
+  recalcCommission();
+}
+function autofillAnticipo(select){
+  const nombre=(select.selectedOptions[0]?.textContent||"").trim().toLowerCase();
+  const saldo=anticiposComisiones[nombre];
+  const input=select.closest(".participant-row").querySelector(".part-anticipo-input");
+  input.value=saldo?saldo.toFixed(2):0;
   recalcCommission();
 }
 async function saveCommission(){
