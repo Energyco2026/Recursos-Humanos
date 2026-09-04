@@ -333,13 +333,16 @@
     .toolbar-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow);margin-bottom:16px}
     .toolbar-flex{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.toolbar-flex>div{min-width:180px;flex:1}
     .status-note{padding:10px 12px;border-radius:10px;background:#f8fafc;color:var(--muted);font-size:13px}
-    .status-note.ok{background:#eef8df;color:#527d00}.status-note.err{background:#fff1f2;color:#b91c1c}
+    .status-note.ok{background:#eef8df;color:#527d00}.status-note.err{background:#fff1f2;color:#b91c1c}.status-note.warn{background:#fff8e6;color:#8a5a00}
+    .saved-card{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;position:relative}
+    .saved-card .btn-mini.danger{position:absolute;top:10px;right:10px}
+    .part-warning{grid-column:1/-1;background:#fff8e6;color:#8a5a00;border-radius:8px;padding:6px 10px;font-size:12px;margin-top:-4px}
     .eval-table-wrap,.commission-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px;background:#fff}
     .eval-table,.commission-table{width:100%;border-collapse:collapse;min-width:980px}
     .eval-table th,.eval-table td,.commission-table th,.commission-table td{padding:11px 12px;border-bottom:1px solid var(--line);font-size:13px;text-align:left;vertical-align:middle}
     .eval-table th,.commission-table th{background:#f8fafc;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.02em}
     .btn-mini{border:1px solid #d7dee9;background:#fff;color:var(--navy);padding:7px 9px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer}
-    .btn-mini:hover{background:#f7fafc}.btn-mini.green{background:#eef8df;color:#527d00;border-color:#d5e9a8}.btn-mini.blue{background:#edf4ff;color:#1d4ed8;border-color:#cfe0ff}
+    .btn-mini:hover{background:#f7fafc}.btn-mini.green{background:#eef8df;color:#527d00;border-color:#d5e9a8}.btn-mini.blue{background:#edf4ff;color:#1d4ed8;border-color:#cfe0ff}.btn-mini.danger{background:#fff1f2;color:#b91c1c;border-color:#fecdd3}
     .commission-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:14px 0}
     .commission-kpis .mini{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}.commission-kpis .mini .l{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase}.commission-kpis .mini .v{font-size:19px;font-weight:800;color:var(--navy);margin-top:6px}
     .commission-panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px}
@@ -628,9 +631,10 @@
         <section id="module-comisiones" class="module">
           <div class="page-heading">
             <div><h2>Cálculo de comisiones</h2><p>Venta, facturación, cobros y analítica se consultan desde la misma base financiera del dashboard de Operaciones.</p></div>
-            <div><button class="small-btn" id="commRefreshBtn">↻ Actualizar datos</button></div>
+            <div style="display:flex;gap:8px"><button class="small-btn" id="commNewBtn">+ Nuevo cálculo</button><button class="small-btn" id="commRefreshBtn">↻ Actualizar datos</button></div>
           </div>
           <div id="commConnection" class="status-note">Fuente financiera: sin consultar.</div>
+          <div id="commExistingWarning" class="status-note warn hidden" style="margin-top:8px"></div>
           <div class="commission-panel" style="margin-top:14px">
             <div class="commission-grid">
               <div class="field-lite span-2"><label>PO / Proyecto</label><input id="commProject" list="commProjectList" placeholder="Escribe o elige el número de PO..."><datalist id="commProjectList"></datalist></div>
@@ -995,6 +999,7 @@ let selectedEvalToken = null;
 let opsProjects = [];
 let opsInvoices = [];
 let commissionsLoaded = false;
+let savedCommissions = [];
 let rolesLoaded = false;
 let allRoles = [];
 
@@ -1601,15 +1606,75 @@ function currentCommissionProject(){
   return {proyecto:poNum,proyecto_nombre:invs[0].cliente||"",monto_contrato:0,presupuesto_aterrizado:0,real_ejecutado:0,_sinControlCostos:true};
 }
 function invoicesForProject(po,p){const poNum=poFromText(po)||po;let invs=opsInvoices.filter(f=>poFromText(f.orden_venta)===poNum||poFromText(f.analitica)===poNum);if(!invs.length){const needles=[String(po),String(p?.proyecto_nombre||"")].filter(x=>x.length>=3).map(x=>x.toLowerCase());invs=opsInvoices.filter(f=>{const txt=[f.analitica,f.orden_venta].join(" ").toLowerCase();return needles.some(n=>txt.includes(n))})}return invs}
-function renderCommissionProject(){const p=currentCommissionProject();if(!p){clearCommissionView();return;}const invs=invoicesForProject(p.proyecto,p),bt=$("commBaseType").value;$("commClient").value=[...new Set(invs.map(x=>x.cliente).filter(Boolean))].join(" / ")||p.proyecto_nombre||"";$("commAnalytic").value=[...new Set(invs.map(x=>x.analitica).filter(Boolean))].join(" / ")||p.proyecto_nombre||"";$("commInvoiceBody").innerHTML=invs.map(f=>{const checked=bt==="cobrado"?num(f.monto_pagado)>0:true;return `<tr><td class="center"><input class="invoice-check" type="checkbox" data-invoice="${f.odoo_id}" ${checked?"checked":""}></td><td>${esc(f.factura||"—")}</td><td>${esc(f.cliente||"—")}</td><td>${esc(f.analitica||"—")}</td><td>${esc(f.vendedor||"—")}</td><td class="right">${money(f.monto_total)}</td><td class="right">${money(f.monto_pagado)}</td><td class="right">${money(f.saldo_pendiente)}</td></tr>`}).join("")||'<tr><td colspan="8">No se encontraron facturas asociadas a esta PO.</td></tr>';document.querySelectorAll("[data-invoice]").forEach(c=>c.onchange=recalcCommission);const expected=(!p._sinControlCostos&&num(p.monto_contrato))?(num(p.monto_contrato)-num(p.presupuesto_aterrizado))/num(p.monto_contrato)*100:NaN, real=(!p._sinControlCostos&&num(p.monto_contrato))?(num(p.monto_contrato)-num(p.real_ejecutado))/num(p.monto_contrato)*100:NaN;$("commSale").textContent=money(p.monto_contrato);$("commMarginExpected").textContent=pctText(expected);$("commMarginReal").textContent=pctText(real);if(!$("commParticipants").children.length)addParticipant();recalcCommission()}
+function renderCommissionProject(){const p=currentCommissionProject();if(!p){clearCommissionView();$("commExistingWarning").classList.add("hidden");return;}checkExistingCommissionForPO(p);const invs=invoicesForProject(p.proyecto,p),bt=$("commBaseType").value;$("commClient").value=[...new Set(invs.map(x=>x.cliente).filter(Boolean))].join(" / ")||p.proyecto_nombre||"";$("commAnalytic").value=[...new Set(invs.map(x=>x.analitica).filter(Boolean))].join(" / ")||p.proyecto_nombre||"";$("commInvoiceBody").innerHTML=invs.map(f=>{const checked=bt==="cobrado"?num(f.monto_pagado)>0:true;return `<tr><td class="center"><input class="invoice-check" type="checkbox" data-invoice="${f.odoo_id}" ${checked?"checked":""}></td><td>${esc(f.factura||"—")}</td><td>${esc(f.cliente||"—")}</td><td>${esc(f.analitica||"—")}</td><td>${esc(f.vendedor||"—")}</td><td class="right">${money(f.monto_total)}</td><td class="right">${money(f.monto_pagado)}</td><td class="right">${money(f.saldo_pendiente)}</td></tr>`}).join("")||'<tr><td colspan="8">No se encontraron facturas asociadas a esta PO.</td></tr>';document.querySelectorAll("[data-invoice]").forEach(c=>c.onchange=recalcCommission);const expected=(!p._sinControlCostos&&num(p.monto_contrato))?(num(p.monto_contrato)-num(p.presupuesto_aterrizado))/num(p.monto_contrato)*100:NaN, real=(!p._sinControlCostos&&num(p.monto_contrato))?(num(p.monto_contrato)-num(p.real_ejecutado))/num(p.monto_contrato)*100:NaN;$("commSale").textContent=money(p.monto_contrato);$("commMarginExpected").textContent=pctText(expected);$("commMarginReal").textContent=pctText(real);if(!$("commParticipants").children.length)addParticipant();recalcCommission()}
 function selectedInvoices(){const ids=[...document.querySelectorAll("[data-invoice]:checked")].map(x=>Number(x.dataset.invoice));return opsInvoices.filter(x=>ids.includes(Number(x.odoo_id)))}
 function recalcCommission(){const p=currentCommissionProject();if(!p)return;const selected=selectedInvoices(),fact=selected.reduce((a,x)=>a+num(x.monto_total),0),paid=selected.reduce((a,x)=>a+num(x.monto_pagado),0),pend=selected.reduce((a,x)=>a+num(x.saldo_pendiente),0),bt=$("commBaseType").value,base=bt==="venta"?num(p.monto_contrato):bt==="facturado"?fact:paid;$("commInvoiced").textContent=money(fact);$("commPaid").textContent=money(paid);$("commPending").textContent=money(pend);$("commBase").value=money(base);$("commDocs").value=selected.length;$("commGross").value=money(base*num($("commPct").value)/100);document.querySelectorAll(".participant-row").forEach(row=>{const rate=num(row.querySelector(".part-pct").value),gross=base*rate/100,iess=gross*.0945,net=gross-iess;row.querySelector(".part-gross").value=money(gross);row.querySelector(".part-iess").value=money(iess);row.querySelector(".part-net").value=money(net)});const rows=[...document.querySelectorAll(".participant-row")],tg=rows.reduce((a,r)=>a+parseMoney(r.querySelector(".part-gross").value),0),ti=rows.reduce((a,r)=>a+parseMoney(r.querySelector(".part-iess").value),0);$("commTotalGross").textContent=money(tg);$("commTotalIess").textContent=money(ti);$("commTotalNet").textContent=money(tg-ti)}
 function parseMoney(v){return Number(String(v||"").replace(/[^0-9,.-]/g,"").replace(/\./g,"").replace(",","."))||0}
 function clearCommissionView(){["commClient","commAnalytic","commBase","commGross","commDocs"].forEach(id=>$(id).value="");["commSale","commInvoiced","commPaid","commPending","commTotalGross","commTotalIess","commTotalNet"].forEach(id=>$(id).textContent=money(0));$("commMarginExpected").textContent=$("commMarginReal").textContent="—";$("commInvoiceBody").innerHTML="";$("commParticipants").innerHTML=""}
 function employeeOptions(){const seen=new Set();return allContracts.filter(x=>x.empleado_id&&!seen.has(x.empleado_id)&&seen.add(x.empleado_id)).sort((a,b)=>(a.empleado_nombre||"").localeCompare(b.empleado_nombre||"","es")).map(x=>`<option value="${x.empleado_id}">${esc(x.empleado_nombre)}</option>`).join("")}
-function addParticipant(){const div=document.createElement("div");div.className="participant-row";div.innerHTML=`<div class="field-lite wide-part"><label>Empleado</label><select class="part-emp"><option value="">Selecciona...</option>${employeeOptions()}</select></div><div class="field-lite"><label>% participación</label><input class="part-pct" type="number" step="0.01" min="0" value="${num($("commPct").value)||5}"></div><div class="field-lite"><label>Comisión</label><input class="part-gross" readonly></div><div class="field-lite"><label>IESS 9,45%</label><input class="part-iess" readonly></div><div class="field-lite"><label>Neto</label><input class="part-net" readonly></div><button class="btn-mini" type="button">Quitar</button>`;div.querySelector(".part-pct").oninput=recalcCommission;div.querySelector("button").onclick=()=>{div.remove();recalcCommission()};$("commParticipants").appendChild(div);recalcCommission()}
-async function saveCommission(){const p=currentCommissionProject();if(!p){alert("Escribe o elige una PO válida (debe tener al menos una factura sincronizada).");return;}const po=p.proyecto;const participants=[...document.querySelectorAll(".participant-row")].map(r=>{const sel=r.querySelector(".part-emp"),contract=allContracts.find(x=>String(x.empleado_id)===sel.value);return {empleado_id:contract?.empleado_id||null,empleado_nombre:contract?.empleado_nombre||sel.selectedOptions[0]?.textContent||"",pct_participacion:num(r.querySelector(".part-pct").value),comision_bruta:parseMoney(r.querySelector(".part-gross").value),iess_pct:9.45,iess_valor:parseMoney(r.querySelector(".part-iess").value),neto_pagar:parseMoney(r.querySelector(".part-net").value)}}).filter(x=>x.empleado_nombre&&x.empleado_nombre!=="Selecciona...");if(!participants.length){alert("Agrega al menos un empleado.");return;}const selected=selectedInvoices(),fact=selected.reduce((a,x)=>a+num(x.monto_total),0),paid=selected.reduce((a,x)=>a+num(x.monto_pagado),0),pend=selected.reduce((a,x)=>a+num(x.saldo_pendiente),0),bt=$("commBaseType").value,base=bt==="venta"?num(p.monto_contrato):bt==="facturado"?fact:paid,expected=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.presupuesto_aterrizado))/num(p.monto_contrato)*100:null,real=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.real_ejecutado))/num(p.monto_contrato)*100:null,period=($("commPeriod").value||new Date().toISOString().slice(0,7))+"-01";const calc={periodo:period,proyecto:String(po),proyecto_nombre:p.proyecto_nombre||null,cliente:$("commClient").value||null,analitica:$("commAnalytic").value||null,facturas_incluidas:selected.map(x=>x.odoo_id),base_tipo:bt,valor_venta:num(p.monto_contrato),total_facturado:fact,total_cobrado:paid,saldo_pendiente:pend,margen_esperado:expected,margen_real:real,pct_comision:num($("commPct").value),base_comision:base,comision_bruta:participants.reduce((a,x)=>a+x.comision_bruta,0),incluir_pago:$("commInclude").value==="1"};const ins=await sb.from("comisiones_calculos").insert(calc).select().single();if(ins.error){alert(ins.error.message);return;}participants.forEach(x=>x.calculo_id=ins.data.id);const pi=await sb.from("comisiones_participantes").insert(participants);if(pi.error){alert("Cálculo guardado, pero fallaron participantes: "+pi.error.message);return;}alert("Cálculo de comisión guardado.");await loadSavedCommissions()}
-async function loadSavedCommissions(){const {data,error}=await sb.from("comisiones_calculos").select("*,comisiones_participantes(*)").order("creado_en",{ascending:false}).limit(100);if(error){$("commSaved").textContent=error.message;return;}$("commSaved").innerHTML=(data||[]).map(x=>`<div class="saved-card"><b>${dateEC(x.periodo)} · PO ${esc(x.proyecto)} · ${esc(x.cliente||"")}</b><div class="muted" style="margin-top:4px">Base: ${esc(x.base_tipo)} ${money(x.base_comision)} · Comisión: ${money(x.comision_bruta)} · ${x.incluir_pago?"Incluida en pago":"No incluida"}</div><div style="margin-top:5px">${(x.comisiones_participantes||[]).map(p=>`${esc(p.empleado_nombre)}: ${p.pct_participacion}% → <b>${money(p.neto_pagar)}</b>`).join(" · ")}</div></div>`).join("")||"Sin cálculos guardados."}
+function addParticipant(){const div=document.createElement("div");div.className="participant-row";div.innerHTML=`<div class="field-lite wide-part"><label>Empleado</label><select class="part-emp"><option value="">Selecciona...</option>${employeeOptions()}</select></div><div class="field-lite"><label>% participación</label><input class="part-pct" type="number" step="0.01" min="0" value="${num($("commPct").value)||5}"></div><div class="field-lite"><label>Comisión</label><input class="part-gross" readonly></div><div class="field-lite"><label>IESS 9,45%</label><input class="part-iess" readonly></div><div class="field-lite"><label>Neto</label><input class="part-net" readonly></div><button class="btn-mini" type="button">Quitar</button>`;div.querySelector(".part-pct").oninput=recalcCommission;div.querySelector(".part-emp").onchange=e=>checkEmployeeAdvance(e.target);div.querySelector("button").onclick=()=>{div.remove();recalcCommission()};$("commParticipants").appendChild(div);recalcCommission()}
+async function saveCommission(){const p=currentCommissionProject();if(!p){alert("Escribe o elige una PO válida (debe tener al menos una factura sincronizada).");return;}const po=p.proyecto;const yaExiste=(savedCommissions||[]).some(x=>String(x.proyecto)===String(po));if(yaExiste&&!confirm("Ya existe un cálculo guardado para la PO "+po+". ¿Guardar de todas formas otro cálculo?")){return;}const participants=[...document.querySelectorAll(".participant-row")].map(r=>{const sel=r.querySelector(".part-emp"),contract=allContracts.find(x=>String(x.empleado_id)===sel.value);return {empleado_id:contract?.empleado_id||null,empleado_nombre:contract?.empleado_nombre||sel.selectedOptions[0]?.textContent||"",pct_participacion:num(r.querySelector(".part-pct").value),comision_bruta:parseMoney(r.querySelector(".part-gross").value),iess_pct:9.45,iess_valor:parseMoney(r.querySelector(".part-iess").value),neto_pagar:parseMoney(r.querySelector(".part-net").value)}}).filter(x=>x.empleado_nombre&&x.empleado_nombre!=="Selecciona...");if(!participants.length){alert("Agrega al menos un empleado.");return;}const selected=selectedInvoices(),fact=selected.reduce((a,x)=>a+num(x.monto_total),0),paid=selected.reduce((a,x)=>a+num(x.monto_pagado),0),pend=selected.reduce((a,x)=>a+num(x.saldo_pendiente),0),bt=$("commBaseType").value,base=bt==="venta"?num(p.monto_contrato):bt==="facturado"?fact:paid,expected=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.presupuesto_aterrizado))/num(p.monto_contrato)*100:null,real=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.real_ejecutado))/num(p.monto_contrato)*100:null,period=($("commPeriod").value||new Date().toISOString().slice(0,7))+"-01";const calc={periodo:period,proyecto:String(po),proyecto_nombre:p.proyecto_nombre||null,cliente:$("commClient").value||null,analitica:$("commAnalytic").value||null,facturas_incluidas:selected.map(x=>x.odoo_id),base_tipo:bt,valor_venta:num(p.monto_contrato),total_facturado:fact,total_cobrado:paid,saldo_pendiente:pend,margen_esperado:expected,margen_real:real,pct_comision:num($("commPct").value),base_comision:base,comision_bruta:participants.reduce((a,x)=>a+x.comision_bruta,0),incluir_pago:$("commInclude").value==="1"};const ins=await sb.from("comisiones_calculos").insert(calc).select().single();if(ins.error){alert(ins.error.message);return;}participants.forEach(x=>x.calculo_id=ins.data.id);const pi=await sb.from("comisiones_participantes").insert(participants);if(pi.error){alert("Cálculo guardado, pero fallaron participantes: "+pi.error.message);return;}alert("Cálculo de comisión guardado.");await loadSavedCommissions();checkExistingCommissionForPO(p)}
+async function loadSavedCommissions(){
+  const {data,error}=await sb.from("comisiones_calculos").select("*,comisiones_participantes(*)").order("creado_en",{ascending:false}).limit(100);
+  if(error){$("commSaved").textContent=error.message;return;}
+  savedCommissions=data||[];
+  renderSavedCommissions();
+}
+function renderSavedCommissions(){
+  $("commSaved").innerHTML=(savedCommissions||[]).map(x=>`<div class="saved-card">
+    <button class="btn-mini danger" data-delete-calc="${x.id}">Eliminar</button>
+    <b>${dateEC(x.periodo)} · PO ${esc(x.proyecto)} · ${esc(x.cliente||"")}</b>
+    <div class="muted" style="margin-top:4px">Base: ${esc(x.base_tipo)} ${money(x.base_comision)} · Comisión: ${money(x.comision_bruta)} · ${x.incluir_pago?"Incluida en pago":"No incluida"}</div>
+    <div style="margin-top:5px">${(x.comisiones_participantes||[]).map(p=>`${esc(p.empleado_nombre)}: ${p.pct_participacion}% → <b>${money(p.neto_pagar)}</b>`).join(" · ")}</div>
+  </div>`).join("")||"Sin cálculos guardados.";
+  document.querySelectorAll("[data-delete-calc]").forEach(btn=>{
+    btn.addEventListener("click",()=>deleteSavedCommission(Number(btn.dataset.deleteCalc)));
+  });
+}
+async function deleteSavedCommission(id){
+  if(!confirm("¿Eliminar este cálculo de comisión guardado? Esta acción no se puede deshacer."))return;
+  const dp=await sb.from("comisiones_participantes").delete().eq("calculo_id",id);
+  if(dp.error){alert("No se pudo eliminar (participantes): "+dp.error.message);return;}
+  const dc=await sb.from("comisiones_calculos").delete().eq("id",id);
+  if(dc.error){alert("No se pudo eliminar el cálculo: "+dc.error.message);return;}
+  await loadSavedCommissions();
+  const p=currentCommissionProject();
+  if(p) checkExistingCommissionForPO(p);
+}
+function newCommissionCalc(){
+  $("commProject").value="";
+  clearCommissionView();
+  $("commExistingWarning").classList.add("hidden");
+  $("commProject").focus();
+}
+function checkExistingCommissionForPO(p){
+  const existentes=(savedCommissions||[]).filter(x=>String(x.proyecto)===String(p.proyecto));
+  const box=$("commExistingWarning");
+  if(!existentes.length){box.classList.add("hidden");box.innerHTML="";return;}
+  box.classList.remove("hidden");
+  box.innerHTML="⚠ Ya existe"+(existentes.length>1?"n "+existentes.length+" cálculos":" un cálculo")+" guardado(s) para la PO "+esc(p.proyecto)+":<br>"+
+    existentes.map(x=>`${dateEC(x.periodo)} · Comisión bruta ${money(x.comision_bruta)} · ${x.incluir_pago?"<b>ya incluida en pago</b>":"no incluida en pago aún"}`).join("<br>");
+}
+function checkEmployeeAdvance(select){
+  const row=select.closest(".participant-row");
+  row.querySelector(".part-warning")?.remove();
+  const nombre=select.selectedOptions[0]?.textContent;
+  if(!nombre||nombre==="Selecciona...")return;
+  const pendientes=[];
+  (savedCommissions||[]).forEach(calc=>{
+    if(calc.incluir_pago) return; // ya pagada/incluida, no cuenta como pendiente
+    (calc.comisiones_participantes||[]).forEach(part=>{
+      if(part.empleado_nombre===nombre) pendientes.push({po:calc.proyecto,neto:part.neto_pagar});
+    });
+  });
+  if(!pendientes.length) return;
+  const total=pendientes.reduce((a,x)=>a+num(x.neto),0);
+  const detalle=pendientes.map(x=>"PO "+esc(x.po)+": "+money(x.neto)).join(" · ");
+  const warn=document.createElement("div");
+  warn.className="part-warning";
+  warn.innerHTML=`⚠ ${esc(nombre)} tiene ${money(total)} en comisiones ya calculadas y no marcadas como pagadas (${detalle}).`;
+  row.appendChild(warn);
+}
 function exportCommissionExcel(){const p=currentCommissionProject();if(!p)return alert("Escribe o elige una PO válida.");const po=p.proyecto;const selected=selectedInvoices();const wb=XLSX.utils.book_new();const resumen=[['Orden de Trabajo','PO '+po],['Proyecto',p.proyecto_nombre||''],['Cliente',$("commClient").value],['Cuenta analítica',$("commAnalytic").value],['Valor de Contrato',num(p.monto_contrato)],['Facturado seleccionado',selected.reduce((a,x)=>a+num(x.monto_total),0)],['Cobrado seleccionado',selected.reduce((a,x)=>a+num(x.monto_pagado),0)],['Saldo pendiente',selected.reduce((a,x)=>a+num(x.saldo_pendiente),0)],['Margen esperado',$("commMarginExpected").textContent],['Margen real',$("commMarginReal").textContent],['Base comisión',parseMoney($("commBase").value)]];XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(resumen),'Resumen');const parts=[['Empleado','% Participación','Valor Comisiones','9,45%','Valor Neto a Pagar']];document.querySelectorAll('.participant-row').forEach(r=>parts.push([r.querySelector('.part-emp').selectedOptions[0]?.textContent||'',num(r.querySelector('.part-pct').value),parseMoney(r.querySelector('.part-gross').value),parseMoney(r.querySelector('.part-iess').value),parseMoney(r.querySelector('.part-net').value)]));XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(parts),'Comisiones');const fac=[['Factura','Cliente','Analítica','Vendedor','Facturado','Cobrado','Pendiente'],...selected.map(f=>[f.factura,f.cliente,f.analitica,f.vendedor,num(f.monto_total),num(f.monto_pagado),num(f.saldo_pendiente)])];XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(fac),'Facturas');XLSX.writeFile(wb,`Comisiones_PO_${po}_${$("commPeriod").value||"periodo"}.xlsx`)}
 
 /* ============================================================
@@ -1817,6 +1882,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   $("evalModalSave").addEventListener("click",saveEvalManager);
   $("evalModalUpload").addEventListener("click",()=>$("evalFileInput").click());
   $("commRefreshBtn").addEventListener("click",()=>{commissionsLoaded=false;loadCommissionData()});
+  $("commNewBtn").addEventListener("click",newCommissionCalc);
   $("commProject").addEventListener("change",renderCommissionProject);
   $("commBaseType").addEventListener("change",renderCommissionProject);
   $("commPct").addEventListener("input",()=>{document.querySelectorAll(".part-pct").forEach(x=>{if(!x.dataset.touched)x.value=$("commPct").value});recalcCommission()});
