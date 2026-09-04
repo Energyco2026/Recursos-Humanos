@@ -354,25 +354,33 @@
 
     /* IMPRESIÓN — comprobante de comisión / certificado */
     #printArea{display:none}
+    @page{size:A4 landscape;margin:12mm}
     @media print{
       body *{visibility:hidden}
       #printArea, #printArea *{visibility:visible}
-      #printArea{display:block;position:absolute;top:0;left:0;width:100%;padding:24px}
-      .print-header{display:flex;align-items:center;gap:16px;border-bottom:3px solid var(--navy);padding-bottom:12px;margin-bottom:18px}
-      .print-header img{height:60px}
-      .print-header h1{font-size:18px;color:var(--navy);margin:0}
-      .print-header p{margin:2px 0 0;color:var(--muted);font-size:12px}
-      .print-title{text-align:center;font-weight:800;font-size:16px;margin:10px 0 18px;text-transform:uppercase;letter-spacing:.05em;color:var(--navy)}
-      .print-meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;margin-bottom:16px;font-size:13px}
+      #printArea{display:block;position:absolute;top:0;left:0;width:100%;padding:10px;box-sizing:border-box}
+      .print-header{display:flex;align-items:center;gap:16px;border-bottom:3px solid var(--navy);padding-bottom:12px;margin-bottom:16px}
+      .print-header img{height:64px}
+      .print-header h1{font-size:20px;color:var(--navy);margin:0}
+      .print-header p{margin:2px 0 0;color:var(--muted);font-size:13px}
+      .print-title{text-align:center;font-weight:800;font-size:19px;margin:6px 0 16px;text-transform:uppercase;letter-spacing:.05em;color:var(--navy)}
+      .print-meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 28px;margin-bottom:16px;font-size:14px}
       .print-meta div b{color:var(--navy)}
-      .print-table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:16px}
-      .print-table th,.print-table td{border:1px solid #cbd5e1;padding:6px 8px;text-align:left}
-      .print-table th{background:#f1f5f9;color:var(--navy)}
-      .print-totals{display:flex;justify-content:flex-end;gap:24px;font-size:13px;margin-bottom:24px}
-      .print-totals b{color:var(--navy)}
-      .print-sign{display:flex;justify-content:space-between;margin-top:60px;font-size:12px}
+      .print-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px}
+      .print-kpis div{border:1px solid #cbd5e1;border-radius:10px;padding:10px 12px}
+      .print-kpis .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+      .print-kpis .value{font-size:24px;font-weight:800;color:var(--navy);margin-top:2px}
+      .print-kpis .value.warn{color:var(--danger)}
+      .print-section-title{font-weight:800;font-size:15px;color:var(--navy);margin:18px 0 8px}
+      .print-table{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:14px;table-layout:fixed}
+      .print-table th,.print-table td{border:1px solid #cbd5e1;padding:8px 10px;text-align:left;word-wrap:break-word}
+      .print-table th{background:#f1f5f9;color:var(--navy);font-size:12px;text-transform:uppercase}
+      .print-table td.num,.print-table th.num{text-align:right}
+      .print-totals{display:flex;justify-content:flex-end;gap:32px;font-size:16px;margin-bottom:28px}
+      .print-totals b{color:var(--navy);font-size:20px}
+      .print-sign{display:flex;justify-content:space-between;margin-top:50px;font-size:13px}
       .print-sign div{width:45%;text-align:center;border-top:1px solid #333;padding-top:6px}
-      .print-footer{margin-top:30px;font-size:10px;color:var(--muted);text-align:center}
+      .print-footer{margin-top:22px;font-size:11px;color:var(--muted);text-align:center}
     }
   </style>
 </head>
@@ -1612,6 +1620,7 @@ function printCommission(){
   const p = currentCommissionProject();
   if(!p){alert("Escribe o elige una PO con datos cargados antes de generar el reporte.");return;}
   const po = p.proyecto;
+  const invs = selectedInvoices();
   const rows = [...document.querySelectorAll(".participant-row")].map(r=>({
     nombre: r.querySelector(".part-emp").selectedOptions[0]?.textContent || "—",
     pct: r.querySelector(".part-pct").value,
@@ -1620,6 +1629,7 @@ function printCommission(){
     net: r.querySelector(".part-net").value
   })).filter(r=>r.nombre && r.nombre!=="Selecciona...");
   const hoy = new Date().toLocaleDateString("es-EC",{year:"numeric",month:"long",day:"numeric"});
+  const pendiente = $("commPending").textContent;
   $("printArea").innerHTML = `
     <div class="print-header">
       <img src="${logoSrc()}" alt="ENERGYCONTROL S.A.">
@@ -1635,12 +1645,27 @@ function printCommission(){
       <div><b>Cliente:</b> ${esc($("commClient").value || "—")}</div>
       <div><b>Cuenta analítica:</b> ${esc($("commAnalytic").value || "—")}</div>
       <div><b>Base para comisión:</b> ${esc($("commBaseType").selectedOptions[0]?.textContent || "—")}</div>
-      <div><b>Base comisionable:</b> ${esc($("commBase").value || "—")}</div>
+      <div><b>Incluir en pago:</b> ${esc($("commInclude").selectedOptions[0]?.textContent || "—")}</div>
     </div>
+    <div class="print-kpis">
+      <div><div class="label">Valor de venta</div><div class="value">${esc($("commSale").textContent)}</div></div>
+      <div><div class="label">Facturado</div><div class="value">${esc($("commInvoiced").textContent)}</div></div>
+      <div><div class="label">Cobrado</div><div class="value">${esc($("commPaid").textContent)}</div></div>
+      <div><div class="label">Saldo pendiente</div><div class="value warn">${esc(pendiente)}</div></div>
+      <div><div class="label">Base comisionable</div><div class="value">${esc($("commBase").value || "—")}</div></div>
+    </div>
+    <div class="print-section-title">Facturas / cobros incluidos</div>
     <table class="print-table">
-      <thead><tr><th>Colaborador</th><th>% Participación</th><th>Comisión bruta</th><th>IESS 9,45%</th><th>Neto a pagar</th></tr></thead>
+      <thead><tr><th>Factura</th><th>Cliente</th><th>Analítica</th><th>Vendedor</th><th class="num">Facturado</th><th class="num">Cobrado</th><th class="num">Pendiente</th></tr></thead>
       <tbody>
-        ${rows.map(r=>`<tr><td>${esc(r.nombre)}</td><td>${esc(r.pct)}%</td><td>${esc(r.gross)}</td><td>${esc(r.iess)}</td><td>${esc(r.net)}</td></tr>`).join("") || '<tr><td colspan="5">Sin colaboradores agregados.</td></tr>'}
+        ${invs.map(f=>`<tr><td>${esc(f.factura||"—")}</td><td>${esc(f.cliente||"—")}</td><td>${esc(f.analitica||"—")}</td><td>${esc(f.vendedor||"—")}</td><td class="num">${money(f.monto_total)}</td><td class="num">${money(f.monto_pagado)}</td><td class="num">${money(f.saldo_pendiente)}</td></tr>`).join("") || '<tr><td colspan="7">Sin facturas incluidas en el cálculo.</td></tr>'}
+      </tbody>
+    </table>
+    <div class="print-section-title">Participación por colaborador</div>
+    <table class="print-table">
+      <thead><tr><th>Colaborador</th><th class="num">% Participación</th><th class="num">Comisión bruta</th><th class="num">IESS 9,45%</th><th class="num">Neto a pagar</th></tr></thead>
+      <tbody>
+        ${rows.map(r=>`<tr><td>${esc(r.nombre)}</td><td class="num">${esc(r.pct)}%</td><td class="num">${esc(r.gross)}</td><td class="num">${esc(r.iess)}</td><td class="num">${esc(r.net)}</td></tr>`).join("") || '<tr><td colspan="5">Sin colaboradores agregados.</td></tr>'}
       </tbody>
     </table>
     <div class="print-totals">
