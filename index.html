@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+  <meta name="referrer" content="no-referrer">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard RRHH | ENERGYCONTROL S.A.</title>
@@ -402,8 +403,9 @@
         <div class="field-lite"><label>Desempeño</label><select id="pubPerformance"><option value="">Selecciona...</option><option>Excelente</option><option>Muy bueno</option><option>Bueno</option><option>Regular</option><option>No satisfactorio</option></select></div>
         <div class="field-lite span-3"><label>Comentarios</label><textarea id="pubComments" placeholder="Observaciones, fortalezas, puntos de mejora o sustento de la decisión..."></textarea></div>
       </div>
-      <div class="btn-row" style="margin-top:18px"><button class="btn-success" id="pubSubmitBtn">Enviar evaluación</button></div>
-      <div id="pubEvalMsg" class="status-note" style="margin-top:12px"></div>
+      <div class="field-lite" style="margin-top:18px"><label for="pubFile">Adjuntar evaluación (obligatorio)</label><input type="file" id="pubFile" accept=".pdf,.doc,.docx,.xls,.xlsx"><small>PDF, Word o Excel. Máximo 10 MB.</small></div>
+      <div class="btn-row" style="margin-top:18px"><button class="btn-success" id="pubSubmitBtn">Enviar evaluación a RRHH</button></div>
+      <div id="pubEvalMsg" role="status" aria-live="polite" class="status-note" style="margin-top:12px"></div>
     </div>
   </div>
 </section>
@@ -1572,7 +1574,7 @@ function renderEvaluations(){
   document.querySelectorAll("[data-eval-manage]").forEach(b=>b.onclick=()=>openEvalManager(b.dataset.evalManage));
   document.querySelectorAll("[data-eval-open]").forEach(b=>b.onclick=()=>openEvalFile(b.dataset.evalOpen));
 }
-async function resendEval(token){const x=evaluations.find(e=>e.token===token);if(!x)return;const link=x.enlace_formulario||evalLink(token);await navigator.clipboard?.writeText(link);if(x.jefe_email){const subj=`Evaluación de ${x.empleado_nombre}`,body=`Hola ${x.jefe_nombre||""},\n\nPor favor completa la evaluación de ${x.empleado_nombre}:\n${link}\n\nGracias.`;location.href=`mailto:${encodeURIComponent(x.jefe_email)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;}else alert("Enlace copiado:\n"+link)}
+async function resendEval(token){const x=evaluations.find(e=>e.token===token);if(!x)return;const link=evalLink(token);await navigator.clipboard?.writeText(link);if(x.jefe_email){const subj=`Evaluación de ${x.empleado_nombre}`,body=`Hola ${x.jefe_nombre||""},\n\nPor favor completa la evaluación de ${x.empleado_nombre}:\n${link}\n\nGracias.`;location.href=`mailto:${encodeURIComponent(x.jefe_email)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;}else alert("Enlace copiado:\n"+link)}
 async function uploadEvaluationFile(file,token){if(!file||!token)return;const x=evaluations.find(e=>e.token===token);const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");const path=`${x?.empleado_id||"sin_id"}/${token}/${Date.now()}_${safe}`;const up=await sb.storage.from("evaluaciones-rrhh").upload(path,file,{upsert:false});if(up.error){alert("No se pudo subir el archivo: "+up.error.message);return;}const upd=await sb.from("alertas_evaluacion").update({archivo_url:path,estado:"recibida",fecha_recibida:new Date().toISOString(),actualizado_en:new Date().toISOString()}).eq("token",token);if(upd.error){alert(upd.error.message);return;}evaluationsLoaded=false;await loadEvaluations();alert("Evaluación subida correctamente.")}
 async function openEvalFile(token){const x=evaluations.find(e=>e.token===token);if(!x?.archivo_url)return;const {data,error}=await sb.storage.from("evaluaciones-rrhh").createSignedUrl(x.archivo_url,300);if(error){alert(error.message);return;}window.open(data.signedUrl,"_blank")}
 function openEvalManager(token){const x=evaluations.find(e=>e.token===token);if(!x)return;selectedEvalToken=token;$("evalModalTitle").textContent="Evaluación — "+x.empleado_nombre;$("evalEditDecision").value=x.decision||"";$("evalEditPerformance").value=x.desempeno||"";$("evalEditEvaluator").value=x.evaluador_nombre||"";$("evalEditComments").value=x.comentarios||"";$("evalEditNext").value=x.proxima_alerta||"";$("evalModalBackdrop").classList.remove("hidden")}
@@ -1580,11 +1582,53 @@ async function saveEvalManager(){if(!selectedEvalToken)return;const decision=$("
 
 async function loadPublicEvaluation(token){
   $("loginView").classList.add("hidden");$("appView").classList.add("hidden");$("publicEvalView").classList.remove("hidden");
-  const {data,error}=await sb.rpc("obtener_evaluacion_publica",{p_token:token});
-  if(error||!data?.length){$("pubEvalIntro").textContent="El enlace no es válido o la evaluación ya no está disponible.";return;}
-  const x=data[0];$("pubEvalTitle").textContent="Evaluación de "+x.empleado_nombre;$("pubEvalIntro").textContent=`Hito: ${x.tipo_plazo==="fin_contrato"?"Fin de contrato":x.tipo_plazo+" días"}. Completa la decisión y observaciones para que RRHH continúe el proceso.`;$("pubEvalForm").classList.remove("hidden");
-  $("pubSubmitBtn").onclick=async()=>{const dec=$("pubDecision").value;if(!dec||!$("pubEvaluator").value.trim()){$("pubEvalMsg").className="status-note err";$("pubEvalMsg").textContent="Completa tu nombre y la decisión.";return;}$("pubSubmitBtn").disabled=true;const r=await sb.rpc("guardar_evaluacion_publica",{p_token:token,p_decision:dec,p_desempeno:$("pubPerformance").value,p_comentarios:$("pubComments").value,p_evaluador_nombre:$("pubEvaluator").value});$("pubSubmitBtn").disabled=false;if(r.error){$("pubEvalMsg").className="status-note err";$("pubEvalMsg").textContent="No se pudo enviar: "+r.error.message;return;}$("pubEvalMsg").className="status-note ok";$("pubEvalMsg").textContent="Evaluación enviada correctamente. Gracias.";$("pubSubmitBtn").classList.add("hidden")}
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)){
+    $("pubEvalIntro").textContent="El enlace no es válido.";return;
+  }
+  token=token.toLowerCase();
+  // Sesión independiente: el formulario siempre usa los permisos públicos del token.
+  const pubSb=supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+  const msg=(text,error=false)=>{$("pubEvalMsg").className="status-note "+(error?"err":"ok");$("pubEvalMsg").textContent=text;};
+  const finish=()=>{document.querySelectorAll("#pubEvalForm input, #pubEvalForm select, #pubEvalForm textarea, #pubEvalForm button").forEach(e=>e.disabled=true);msg("Evaluación recibida por RRHH. Gracias.");};
+  try{
+    const {data,error}=await pubSb.rpc("rrhh_public_get",{p_token:token});
+    if(error)throw error;
+    if(!data?.length){$("pubEvalIntro").textContent="El enlace no es válido o ya no está disponible.";return;}
+    const x=data[0];$("pubEvalTitle").textContent="Evaluación de "+x.empleado_nombre;
+    $("pubEvalIntro").textContent=`Hito: ${x.tipo_plazo==="fin_contrato"?"Fin de contrato":x.tipo_plazo+" días"}. Registra la decisión y adjunta el documento de evaluación.`;
+    $("pubEvalForm").classList.remove("hidden");
+    if(x.estado==="recibida"){finish();return;}
+    if(x.estado!=="pendiente"){$("pubEvalForm").classList.add("hidden");$("pubEvalIntro").textContent="Esta evaluación ya no admite respuestas.";return;}
+  }catch(e){$("pubEvalIntro").textContent="No se pudo cargar la evaluación. Comprueba tu conexión y vuelve a abrir el enlace.";return;}
+  let uploaded=null;
+  $("pubSubmitBtn").onclick=async()=>{
+    const button=$("pubSubmitBtn");if(button.disabled)return;
+    const file=$("pubFile").files?.[0], decision=$("pubDecision").value;
+    const evaluator=$("pubEvaluator").value.trim(), performance=$("pubPerformance").value, comments=$("pubComments").value.trim();
+    if(!decision||!evaluator||!performance){msg("Completa tu nombre, decisión y desempeño.",true);return;}
+    if(evaluator.length>200||comments.length>10000){msg("Usa hasta 200 caracteres en el nombre y 10.000 en comentarios.",true);return;}
+    if(!file||! /\.(pdf|docx?|xlsx?)$/i.test(file.name)||file.size===0||file.size>10*1024*1024){msg("Adjunta un PDF, Word o Excel de hasta 10 MB, que no esté vacío.",true);return;}
+    button.disabled=true;let complete=false;
+    try{
+      if(!uploaded||uploaded.file!==file){
+        msg("Subiendo archivo…");
+        const path=`public/${token}/${crypto.randomUUID()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,"_").slice(-150)}`;
+        const {error}=await pubSb.storage.from("evaluaciones-rrhh").upload(path,file,{upsert:false});
+        if(error)throw new Error("No se pudo subir el archivo. Revisa tu conexión y vuelve a intentarlo.");
+        uploaded={file,path};
+      }
+      msg("Guardando evaluación…");
+      const {data,error}=await pubSb.rpc("rrhh_public_save",{p_token:token,p_decision:decision,p_desempeno:performance,p_comentarios:comments,p_evaluador_nombre:evaluator,p_archivo_url:uploaded.path});
+      if(error||data!==true)throw new Error("No se pudo confirmar el envío. Puedes reintentar; se reutilizará el archivo ya cargado.");
+      complete=true;finish();
+    }catch(e){
+      // Una respuesta perdida puede haber confirmado el registro en el servidor.
+      try{const check=await pubSb.rpc("rrhh_public_get",{p_token:token});if(!check.error&&check.data?.[0]?.estado==="recibida"){complete=true;finish();}}catch(_){}
+      if(!complete)msg(e.message||"No se pudo enviar. Intenta nuevamente.",true);
+    }finally{if(!complete)button.disabled=false;}
+  };
 }
+
 
 function num(v){return Number(v||0)}
 function pctText(v){return Number.isFinite(v)?v.toLocaleString("es-EC",{minimumFractionDigits:1,maximumFractionDigits:1})+"%":"—"}
@@ -1969,7 +2013,7 @@ function exportCSV(){
 
 document.addEventListener("DOMContentLoaded", async ()=>{
   const ready = initSupabase();
-  const publicToken = new URLSearchParams(location.search).get("evaluacion");
+  const publicToken = new URLSearchParams(location.search).get("evaluacion") || new URLSearchParams(location.search).get("id");
   if(ready && publicToken){ await loadPublicEvaluation(publicToken); return; }
 
   $("loginBtn").addEventListener("click",login);
