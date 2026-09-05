@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta name="referrer" content="no-referrer">
@@ -907,6 +907,7 @@
               </div>
               <div class="form-group"><label>Firmante</label><input id="certSigner" value="Msc. Ec. Shirley Maya Ch."></div>
               <div class="form-group"><label>Cargo del firmante</label><input id="certSignerJob" value="Jefa de Recursos Humanos"></div>
+              <div class="form-group"><label>Cédula del firmante (opcional)</label><input id="certSignerId" value="0927237461"></div>
             </div>
             <div class="btn-row">
               <button class="btn-secondary" id="certPreviewBtn">Vista previa</button>
@@ -1902,9 +1903,30 @@ function printCommission(){
    CERTIFICADOS LABORALES
 ============================================================ */
 function certificateText(d){
-  const base = `Quien suscribe, ${esc(d.signer)}, en calidad de ${esc(d.signerJob)} de ENERGYCONTROL S.A., CERTIFICA que ${esc(d.treatment)} ${esc(d.nombre)}, portador(a) de la cédula de identidad N.° ${esc(d.id)}, labora en nuestra empresa desde el ${esc(d.startLong)}, desempeñando el cargo de ${esc(d.cargo)}.`;
-  const salario = d.tipo==="con_sueldo" ? ` Percibe un sueldo mensual de USD ${esc(d.salario)}.` : "";
-  return base+salario+" Se extiende el presente certificado a solicitud del interesado(a), para los fines que estime conveniente.";
+  const base = `Por medio del presente, certifico que ${d.treatment} ${d.nombre}, con cédula de ciudadanía No. ${d.id}, presta sus servicios en la compañía ENERGYCONTROL S.A., con RUC No. 0992284714001, desde el ${d.startLong}, desempeñando el cargo de ${d.cargo}.`;
+  return base+(d.tipo==="con_sueldo" ? ` Percibe una remuneración mensual de USD ${d.salario}.` : "");
+}
+function certificateMarkup(d){
+  const logo=document.querySelector("#publicEvalView img")?.src||logoSrc();
+  return `<div style="font-family:'Century Gothic',Arial,sans-serif;font-size:11pt;color:#000;line-height:1.5">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:30pt"><tr>
+      <td style="width:46%;vertical-align:middle"><img src="${logo}" alt="ENERGYCONTROL" width="210" style="width:210px;max-width:100%;height:auto"></td>
+      <td style="font-size:8pt;text-align:right;vertical-align:middle;line-height:1.35">Oficinas: Cdla. Urdesa Central. Bálsamos Sur 118<br>Y calle Única, manzana 22, solar 1.<br>Edificio Sem Group Medialab.<br>Guayaquil, Ecuador<br>Teléfono: (593-4) 3726779 - 0994104356<br>E-mail: info@energycontrolsa.com<br>R.U.C. No. 0992284714001</td>
+    </tr></table>
+    <p style="text-align:right;margin:0 0 34pt">${esc(d.ciudad)}, ${esc(d.hoy)}</p>
+    <h1 style="font-family:'Century Gothic',Arial,sans-serif;font-size:24pt;font-weight:bold;text-align:center;color:#000;margin:0 0 32pt">CERTIFICADO</h1>
+    <p style="text-align:justify;margin:0 0 18pt">${esc(certificateText(d))}</p>
+    <p style="text-align:justify;margin:0 0 30pt">El presente certificado se expide a solicitud de la persona interesada, para los fines que estime pertinentes.</p>
+    <p style="margin:0 0 54pt">Atentamente,</p>
+    <p style="margin:0"><b>${esc(d.signer)}</b><br>${esc(d.signerJob)}${d.signerId?'<br>C.C. '+esc(d.signerId):''}<br>ENERGYCONTROL S.A.</p>
+    <p style="font-size:9pt;color:#555;text-align:center;margin:45pt 0 0">INGENIERÍA · SERVICIO · REPUESTOS · FABRICACIÓN</p>
+  </div>`;
+}
+function validCertificate(){
+  if(!$("certEmployee").value){alert("Selecciona un colaborador.");return false;}
+  for(const id of ["certId","certJob","certStart","certCity","certSigner","certSignerJob"]){if(!$(id).value.trim()){alert("Completa cédula, cargo, fecha de ingreso, ciudad y datos del firmante.");$(id).focus();return false;}}
+  if($("certType").value==="con_sueldo"&&(!$("certSalary").value||Number($("certSalary").value)<=0)){alert("Ingresa un sueldo mensual válido.");return false;}
+  return true;
 }
 function longDate(iso){
   if(!iso) return "—";
@@ -1932,33 +1954,32 @@ function certificateData(){
     treatment:$("certTreatment").value,
     signer:$("certSigner").value,
     signerJob:$("certSignerJob").value,
+    signerId:$("certSignerId").value.trim(),
     tipo:$("certType").value,
     hoy: new Date().toLocaleDateString("es-EC",{year:"numeric",month:"long",day:"numeric"})
   };
 }
 function previewCertificate(){
-  if(!$("certEmployee").value){alert("Selecciona un colaborador.");return;}
-  const d=certificateData();
-  $("certPreview").innerHTML=`<h4>Vista previa del certificado</h4><p>${esc(certificateText(d))}</p><p>${esc(d.ciudad)}, ${esc(d.hoy)}.</p>`;
+  if(!validCertificate())return;
+  $("certPreview").innerHTML=certificateMarkup(certificateData());
   $("certPreview").classList.add("show");
 }
 function downloadCertificate(){
-  if(!$("certEmployee").value){alert("Selecciona un colaborador.");return;}
+  if(!validCertificate())return;
   const d=certificateData();
-  const texto=certificateText(d);
-  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Calibri,Arial,sans-serif;font-size:11pt">
-  <div style="text-align:center;margin-bottom:24px"><img src="${logoSrc()}" style="height:70px"></div>
-  <h2 style="text-align:center;text-transform:uppercase;letter-spacing:1px">Certificado Laboral</h2>
-  <p style="line-height:1.6;text-align:justify;margin-top:24px">${texto}</p>
-  <p style="margin-top:48px">${esc(d.ciudad)}, ${esc(d.hoy)}.</p>
-  <p style="margin-top:60px">_______________________________<br><b>${esc(d.signer)}</b><br>${esc(d.signerJob)}<br>ENERGYCONTROL S.A.</p>
-  </body></html>`;
-  const blob=new Blob(['\ufeff',html],{type:"application/msword"});
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download=`Certificado_Laboral_${(allContracts.find(c=>Number(c.empleado_id)===Number($("certEmployee").value))?.empleado_nombre||"colaborador").replace(/[^a-z0-9]+/gi,"_")}.doc`;
-  a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  // MHTML incluye el logo dentro del documento de Word, sin imágenes externas.
+  const markup=certificateMarkup(d);
+  const image=markup.match(/src="(data:image\/png;base64,([^"]+))"/);
+  const boundary="----EnergycontrolCertificado";
+  const html='<!DOCTYPE html><html><head><meta charset="utf-8"><style>@page{size:8.5in 11in;margin:0.89in 1.18in 0.79in}body{margin:0}</style></head><body>'+ (image?markup.replace(image[1],'file:///logo-energycontrol.png'):markup)+'</body></html>';
+  const encoded=btoa(unescape(encodeURIComponent(html))).match(/.{1,76}/g).join("\r\n");
+  let content='MIME-Version: 1.0\r\nContent-Type: multipart/related; boundary="'+boundary+'"\r\n\r\n--'+boundary+'\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\nContent-Location: file:///certificado.htm\r\n\r\n'+encoded+'\r\n';
+  if(image)content+='--'+boundary+'\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\nContent-Location: file:///logo-energycontrol.png\r\n\r\n'+image[2].match(/.{1,76}/g).join("\r\n")+'\r\n';
+  content+='--'+boundary+'--\r\n';
+  const blob=new Blob([content],{type:"application/msword"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=`Certificado_Laboral_${d.nombre.replace(/[^a-z0-9]+/gi,"_")}.doc`;
+  a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
 }
 
 /* ============================================================
