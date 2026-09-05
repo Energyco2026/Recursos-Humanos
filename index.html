@@ -272,6 +272,8 @@
     .badge.PROXIMO_VENCER{background:#fff0d9;color:#b45309}
     .badge.URGENTE,.badge.VENCIDO{background:#fee2e2;color:#b91c1c}
     .badge.INACTIVO{background:#e5e7eb;color:#475569}
+    .badge.EVALUADO{background:#e8f6ea;color:#166534}
+    .badge.ANULADA{background:#f1f5f9;color:#64748b}
     .days.urgent{color:#b91c1c;font-weight:900}
     .days.soon{color:#b45309;font-weight:900}
     .days.ok{color:#166534;font-weight:800}
@@ -1122,6 +1124,17 @@ async function loadContracts(){
   }
 
   allContracts = data || [];
+
+  // Cargar evaluaciones junto con los contratos para que un hito ya evaluado
+  // deje de aparecer como URGENTE automáticamente.
+  const evalResp = await sb.from("alertas_evaluacion").select("*").order("creado_en",{ascending:false});
+  if(!evalResp.error){
+    evaluations = evalResp.data || [];
+    evaluationsLoaded = true;
+  } else {
+    console.warn("No se pudieron cruzar evaluaciones para los semáforos:", evalResp.error.message);
+  }
+
   const syncText = allContracts.length
     ? new Date(Math.max(...allContracts.map(x=>new Date(x.actualizado_en||0)))).toLocaleString("es-EC")
     : "Sin datos";
@@ -1185,17 +1198,28 @@ function buildFilters(){
     uniqueEmployees.map(x=>`<option value="${esc(x.empleado_nombre)}">${esc(x.empleado_nombre)}</option>`).join("");
 }
 
+function evaluationForCurrentMilestone(x){
+  const tipo = typeFromContract(x);
+  return evaluations.find(e=>
+    String(e.empleado_id)===String(x.empleado_id) &&
+    e.tipo_plazo===tipo &&
+    e.estado==="recibida"
+  ) || null;
+}
+function isResolvedByEvaluation(x){ return !!evaluationForCurrentMilestone(x); }
+function dashboardStatus(x){ return isResolvedByEvaluation(x) ? "EVALUADO" : x.estado; }
+
 function updateKpis(){
   const active = allContracts.filter(x=>x.activo !== false);
   $("kpiTotal").textContent = active.length;
   $("kpiEmployees").textContent = new Set(active.map(x=>x.empleado_id).filter(Boolean)).size;
   $("kpiIndef").textContent = active.filter(x=>(x.tipo_contrato||"").toLowerCase().includes("indefinido")).length;
-  $("kpiMilestones").textContent = active.filter(x=>x.estado==="PROXIMO_HITO").length;
-  $("kpiExpire").textContent = active.filter(x=>x.estado==="PROXIMO_VENCER").length;
+  $("kpiMilestones").textContent = active.filter(x=>dashboardStatus(x)==="PROXIMO_HITO").length;
+  $("kpiExpire").textContent = active.filter(x=>dashboardStatus(x)==="PROXIMO_VENCER").length;
   const indef = active.filter(x=>(x.tipo_contrato||"").toLowerCase().includes("indefinido")).length;
-  const milestones = active.filter(x=>x.estado==="PROXIMO_HITO").length;
-  const expire = active.filter(x=>x.estado==="PROXIMO_VENCER").length;
-  const urgent = active.filter(x=>x.estado==="URGENTE").length;
+  const milestones = active.filter(x=>dashboardStatus(x)==="PROXIMO_HITO").length;
+  const expire = active.filter(x=>dashboardStatus(x)==="PROXIMO_VENCER").length;
+  const urgent = active.filter(x=>dashboardStatus(x)==="URGENTE").length;
   $("kpiUrgent").textContent = urgent;
 
   $("sumTotal").textContent = active.length;
@@ -1220,16 +1244,17 @@ function applyFilters(){
       x.tipo_contrato,x.proximo_hito
     ].join(" ").toLowerCase();
 
+    const effectiveStatus = dashboardStatus(x);
     let drillOk = true;
-    if(drillMode==="urgent") drillOk = x.estado==="URGENTE";
-    if(drillMode==="upcoming") drillOk = ["PROXIMO_HITO","PROXIMO_VENCER"].includes(x.estado);
+    if(drillMode==="urgent") drillOk = effectiveStatus==="URGENTE";
+    if(drillMode==="upcoming") drillOk = ["PROXIMO_HITO","PROXIMO_VENCER"].includes(effectiveStatus);
     if(drillMode==="indef") drillOk = (x.tipo_contrato||"").toLowerCase().includes("indefinido");
 
     return drillOk
       && (!q || haystack.includes(q))
       && (!type || x.tipo_contrato===type)
       && (!boss || x.jefe_nombre===boss)
-      && (!status || x.estado===status);
+      && (!status || effectiveStatus===status);
   });
 
   sortData();
@@ -1273,7 +1298,7 @@ function renderTable(){
       <td>${esc(x.proximo_hito || "—")}</td>
       <td class="days ${dayClass}">${days ?? "—"}</td>
       <td>${dateEC(x.fecha_fin)}</td>
-      <td><span class="badge ${esc(x.estado)}">${statusLabel(x.estado)}</span></td>
+      <td>${(()=>{const ev=evaluationForCurrentMilestone(x);return ev?`<span class="badge EVALUADO">Evaluado · ${esc(ev.decision||"recibida")}</span>`:`<span class="badge ${esc(x.estado)}">${statusLabel(x.estado)}</span>`})()}</td>
     </tr>`;
   }).join("");
 
@@ -1564,22 +1589,40 @@ async function loadEvaluations(){
 }
 function renderEvaluations(){
   const q=($("evalSearch")?.value||"").toLowerCase().trim(), st=$("evalStatus")?.value||"";
-  const rows=evaluations.filter(x=>(!st||x.estado===st)&&(!q||[x.empleado_nombre,x.jefe_nombre,x.tipo_plazo,x.decision,x.proxima_alerta].join(" ").toLowerCase().includes(q)));
-  const pending=evaluations.filter(x=>x.estado==="pendiente").length, received=evaluations.filter(x=>x.estado==="recibida").length;
+  const visibles=evaluations.filter(x=>x.estado!=="anulada");
+  const rows=visibles.filter(x=>(!st||x.estado===st)&&(!q||[x.empleado_nombre,x.jefe_nombre,x.tipo_plazo,x.decision,x.proxima_alerta].join(" ").toLowerCase().includes(q)));
+  const pending=visibles.filter(x=>x.estado==="pendiente").length, received=visibles.filter(x=>x.estado==="recibida").length;
   $("evalPendingKpi").textContent=pending;$("evalReceivedKpi").textContent=received;$("sumEvaluations").textContent=pending;
-  $("evalContinueKpi").textContent=evaluations.filter(x=>["continuar","renovar","extender_indefinido"].includes(x.decision)).length;
-  $("evalStopKpi").textContent=evaluations.filter(x=>x.decision==="prescindir").length;
-  $("evalBody").innerHTML=rows.map(x=>`<tr><td><b>${esc(x.empleado_nombre)}</b></td><td>${esc(x.tipo_plazo==="fin_contrato"?"Fin contrato":x.tipo_plazo+" días")}</td><td>${esc(x.jefe_nombre||"—")}</td><td><span class="badge ${x.estado==="recibida"?"ACTIVO":"PROXIMO_HITO"}">${esc(x.estado)}</span></td><td>${x.fecha_recibida?new Date(x.fecha_recibida).toLocaleDateString("es-EC"):"—"}</td><td>${esc(x.decision||"—")}</td><td>${esc(x.proxima_alerta||"—")}</td><td>${x.archivo_url?`<button class="btn-mini blue" data-eval-open="${x.token}">Abrir</button>`:"—"}</td><td><button class="btn-mini green" data-eval-send="${x.token}">Enviar enlace</button> <button class="btn-mini" data-eval-upload="${x.token}">Subir</button> <button class="btn-mini" data-eval-manage="${x.token}">Gestionar</button></td></tr>`).join("")||'<tr><td colspan="9">No hay evaluaciones para este filtro.</td></tr>';
+  $("evalContinueKpi").textContent=visibles.filter(x=>["continuar","renovar","extender_indefinido"].includes(x.decision)).length;
+  $("evalStopKpi").textContent=visibles.filter(x=>x.decision==="prescindir").length;
+  $("evalBody").innerHTML=rows.map(x=>`<tr><td><b>${esc(x.empleado_nombre)}</b></td><td>${esc(x.tipo_plazo==="fin_contrato"?"Fin contrato":x.tipo_plazo+" días")}</td><td>${esc(x.jefe_nombre||"—")}</td><td><span class="badge ${x.estado==="recibida"?"ACTIVO":"PROXIMO_HITO"}">${esc(x.estado)}</span></td><td>${x.fecha_recibida?new Date(x.fecha_recibida).toLocaleDateString("es-EC"):"—"}</td><td>${esc(x.decision||"—")}</td><td>${esc(x.proxima_alerta||"—")}</td><td>${x.archivo_url?`<button class="btn-mini blue" data-eval-open="${x.token}">Abrir</button>`:"—"}</td><td><button class="btn-mini green" data-eval-send="${x.token}">Enviar enlace</button> <button class="btn-mini" data-eval-upload="${x.token}">Subir</button> <button class="btn-mini" data-eval-manage="${x.token}">Gestionar</button>${x.estado==="pendiente"?` <button class="btn-mini danger" data-eval-delete="${x.token}">Eliminar</button>`:""}</td></tr>`).join("")||'<tr><td colspan="9">No hay evaluaciones para este filtro.</td></tr>';
   document.querySelectorAll("[data-eval-send]").forEach(b=>b.onclick=()=>resendEval(b.dataset.evalSend));
   document.querySelectorAll("[data-eval-upload]").forEach(b=>b.onclick=()=>{selectedEvalToken=b.dataset.evalUpload;$("evalFileInput").click()});
   document.querySelectorAll("[data-eval-manage]").forEach(b=>b.onclick=()=>openEvalManager(b.dataset.evalManage));
   document.querySelectorAll("[data-eval-open]").forEach(b=>b.onclick=()=>openEvalFile(b.dataset.evalOpen));
+  document.querySelectorAll("[data-eval-delete]").forEach(b=>b.onclick=()=>deleteEvaluation(b.dataset.evalDelete));
+}
+async function deleteEvaluation(token){
+  const x=evaluations.find(e=>e.token===token); if(!x)return;
+  if(x.estado!=="pendiente"){ alert("Solo se pueden eliminar evaluaciones pendientes o creadas por prueba."); return; }
+  if(!confirm(`¿Eliminar la evaluación pendiente de ${x.empleado_nombre}?\n\nÚsalo para pruebas o evaluaciones creadas por error. Esta acción la quitará de Pendientes.`))return;
+
+  // Intentar eliminar físicamente. Si RLS no permite DELETE, la anulamos y la ocultamos.
+  const del=await sb.from("alertas_evaluacion").delete().eq("token",token);
+  if(del.error){
+    const upd=await sb.from("alertas_evaluacion").update({estado:"anulada",actualizado_en:new Date().toISOString()}).eq("token",token);
+    if(upd.error){alert("No se pudo eliminar/anular la evaluación: "+upd.error.message);return;}
+  }
+  evaluationsLoaded=false;
+  await loadEvaluations();
+  updateKpis();
+  applyFilters();
 }
 async function resendEval(token){const x=evaluations.find(e=>e.token===token);if(!x)return;const link=evalLink(token);await navigator.clipboard?.writeText(link);if(x.jefe_email){const subj=`Evaluación de ${x.empleado_nombre}`,body=`Hola ${x.jefe_nombre||""},\n\nPor favor completa la evaluación de ${x.empleado_nombre}:\n${link}\n\nGracias.`;location.href=`mailto:${encodeURIComponent(x.jefe_email)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;}else alert("Enlace copiado:\n"+link)}
-async function uploadEvaluationFile(file,token){if(!file||!token)return;const x=evaluations.find(e=>e.token===token);const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");const path=`${x?.empleado_id||"sin_id"}/${token}/${Date.now()}_${safe}`;const up=await sb.storage.from("evaluaciones-rrhh").upload(path,file,{upsert:false});if(up.error){alert("No se pudo subir el archivo: "+up.error.message);return;}const upd=await sb.from("alertas_evaluacion").update({archivo_url:path,estado:"recibida",fecha_recibida:new Date().toISOString(),actualizado_en:new Date().toISOString()}).eq("token",token);if(upd.error){alert(upd.error.message);return;}evaluationsLoaded=false;await loadEvaluations();alert("Evaluación subida correctamente.")}
+async function uploadEvaluationFile(file,token){if(!file||!token)return;const x=evaluations.find(e=>e.token===token);const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");const path=`${x?.empleado_id||"sin_id"}/${token}/${Date.now()}_${safe}`;const up=await sb.storage.from("evaluaciones-rrhh").upload(path,file,{upsert:false});if(up.error){alert("No se pudo subir el archivo: "+up.error.message);return;}const upd=await sb.from("alertas_evaluacion").update({archivo_url:path,estado:"recibida",fecha_recibida:new Date().toISOString(),actualizado_en:new Date().toISOString()}).eq("token",token);if(upd.error){alert(upd.error.message);return;}evaluationsLoaded=false;await loadEvaluations();updateKpis();applyFilters();alert("Evaluación subida correctamente.")}
 async function openEvalFile(token){const x=evaluations.find(e=>e.token===token);if(!x?.archivo_url)return;const {data,error}=await sb.storage.from("evaluaciones-rrhh").createSignedUrl(x.archivo_url,300);if(error){alert(error.message);return;}window.open(data.signedUrl,"_blank")}
 function openEvalManager(token){const x=evaluations.find(e=>e.token===token);if(!x)return;selectedEvalToken=token;$("evalModalTitle").textContent="Evaluación — "+x.empleado_nombre;$("evalEditDecision").value=x.decision||"";$("evalEditPerformance").value=x.desempeno||"";$("evalEditEvaluator").value=x.evaluador_nombre||"";$("evalEditComments").value=x.comentarios||"";$("evalEditNext").value=x.proxima_alerta||"";$("evalModalBackdrop").classList.remove("hidden")}
-async function saveEvalManager(){if(!selectedEvalToken)return;const decision=$("evalEditDecision").value||null;let next=$("evalEditNext").value.trim();if(!next&&decision){next={renovar:"Preparar renovación contractual",extender_indefinido:"Preparar contrato indefinido",prescindir:"Iniciar proceso de salida / no renovación",continuar:"Continuar seguimiento"}[decision]||""}const payload={decision,desempeno:$("evalEditPerformance").value.trim()||null,evaluador_nombre:$("evalEditEvaluator").value.trim()||null,comentarios:$("evalEditComments").value.trim()||null,proxima_alerta:next||null,actualizado_en:new Date().toISOString()};if(decision){payload.estado="recibida";payload.fecha_recibida=new Date().toISOString()}const {error}=await sb.from("alertas_evaluacion").update(payload).eq("token",selectedEvalToken);if(error){alert(error.message);return;}$("evalModalBackdrop").classList.add("hidden");evaluationsLoaded=false;await loadEvaluations()}
+async function saveEvalManager(){if(!selectedEvalToken)return;const decision=$("evalEditDecision").value||null;let next=$("evalEditNext").value.trim();if(!next&&decision){next={renovar:"Preparar renovación contractual",extender_indefinido:"Preparar contrato indefinido",prescindir:"Iniciar proceso de salida / no renovación",continuar:"Continuar seguimiento"}[decision]||""}const payload={decision,desempeno:$("evalEditPerformance").value.trim()||null,evaluador_nombre:$("evalEditEvaluator").value.trim()||null,comentarios:$("evalEditComments").value.trim()||null,proxima_alerta:next||null,actualizado_en:new Date().toISOString()};if(decision){payload.estado="recibida";payload.fecha_recibida=new Date().toISOString()}const {error}=await sb.from("alertas_evaluacion").update(payload).eq("token",selectedEvalToken);if(error){alert(error.message);return;}$("evalModalBackdrop").classList.add("hidden");evaluationsLoaded=false;await loadEvaluations();updateKpis();applyFilters()}
 
 async function loadPublicEvaluation(token){
   $("loginView").classList.add("hidden");$("appView").classList.add("hidden");$("publicEvalView").classList.remove("hidden");
