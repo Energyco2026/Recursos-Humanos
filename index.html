@@ -8,6 +8,9 @@
   <meta name="description" content="Dashboard interno de contratos y seguimiento RRHH de ENERGYCONTROL S.A." />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.6/dist/pizzip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.44.0/build/docxtemplater.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <style>
     :root{
       --green:#80BD01;
@@ -723,7 +726,7 @@
                   <option value="indef3">Indefinido 3 - Comercial + comisiones</option>
                   <option value="obra">Obra o servicio determinado</option>
                   <option value="pasantia">Pasantías - pendiente plantilla</option>
-                  <option value="sector">Sector Productivo - pendiente plantilla</option>
+                  <option value="sector">Sector Productivo (cargo variable)</option>
                   <option value="eventual">Trabajo Eventual Discontinuo - pendiente plantilla</option>
                 </select>
                 <div class="helper">Usa la pestaña “Tipos de contrato” si necesitas revisar cuál corresponde.</div>
@@ -754,7 +757,12 @@
               <div class="form-group"><label>Horario desde</label><input id="genTimeFrom" type="time"></div>
               <div class="form-group"><label>Horario hasta</label><input id="genTimeTo" type="time"></div>
               <div class="form-group"><label>Tiempo de alimentación</label><input id="genBreak" placeholder="Ej. 1 hora"></div>
-              <div class="form-group span-3"><label>Días de trabajo</label><input id="genWorkDays" placeholder="Ej. lunes a viernes"></div>
+              <div class="form-group"><label>Día desde</label>
+                <select id="genDayFrom"><option>Lunes</option><option>Martes</option><option>Miércoles</option><option>Jueves</option><option>Viernes</option><option>Sábado</option><option>Domingo</option></select>
+              </div>
+              <div class="form-group"><label>Día hasta</label>
+                <select id="genDayTo"><option>Viernes</option><option>Lunes</option><option>Martes</option><option>Miércoles</option><option>Jueves</option><option>Sábado</option><option>Domingo</option></select>
+              </div>
             </div>
 
             <div id="projectFields">
@@ -766,6 +774,11 @@
                 <div class="form-group"><label>Fecha contrato comercial</label><input id="genCommercialDate" type="date"></div>
                 <div class="form-group"><label>Culminación tentativa</label><input id="genEstimatedEnd" type="date"></div>
                 <div class="form-group span-3"><label>Alcance específico del trabajador</label><textarea id="genScope" placeholder="Ej. montaje eléctrico, fase de cimentación, supervisión del proyecto..."></textarea></div>
+                <div class="form-group"><label>Correo del trabajador</label><input id="genEmail" type="email" placeholder="correo@ejemplo.com"></div>
+                <div class="form-group"><label>Celular / WhatsApp</label><input id="genPhone" placeholder="09XXXXXXXX"></div>
+                <div class="form-group"><label>Periodicidad de pago</label>
+                  <select id="genPayFrequency"><option value="Mensual">Mensual</option><option value="Diaria">Diaria</option><option value="Por hora">Por hora</option></select>
+                </div>
               </div>
             </div>
 
@@ -1372,7 +1385,7 @@ function generationData(){
     "Lugar de trabajo": $("genWorkplace").value,
     "Horario": [$("genTimeFrom").value,$("genTimeTo").value].filter(Boolean).join(" - "),
     "Alimentación": $("genBreak").value,
-    "Días de trabajo": $("genWorkDays").value,
+    "Días de trabajo": $("genDayFrom").value + " a " + $("genDayTo").value,
     "Proyecto": $("genProject").value,
     "Cliente": $("genClient").value,
     "Referencia contractual": $("genCommercialContract").value,
@@ -1402,16 +1415,147 @@ function clearGeneration(){
   $("genPreview").classList.remove("show");
 }
 
-function prepareContract(){
+/* ============================================================
+   GENERACIÓN DE CONTRATOS (Word real desde plantilla)
+============================================================ */
+
+const MESES_ES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+
+// Recibe "YYYY-MM-DD" (o vacío) y devuelve {dia, mes, anio} en español. Si no hay fecha, usa hoy.
+function partesFecha(isoDate){
+  const d = isoDate ? new Date(isoDate + "T00:00:00") : new Date();
+  return { dia: String(d.getDate()), mes: MESES_ES[d.getMonth()], anio: String(d.getFullYear()), _d: d };
+}
+
+// Suma días a una fecha YYYY-MM-DD (o a hoy si viene vacía) y devuelve {dia, mes, anio}
+function partesFechaMasDias(isoDate, dias){
+  const base = isoDate ? new Date(isoDate + "T00:00:00") : new Date();
+  base.setDate(base.getDate() + dias);
+  return { dia: String(base.getDate()), mes: MESES_ES[base.getMonth()], anio: String(base.getFullYear()) };
+}
+
+function fechaLarga(d){
+  return `${d.getDate()} de ${MESES_ES[d.getMonth()]} de ${d.getFullYear()}`;
+}
+
+function money(v){
+  const n = Number(v || 0);
+  return n.toLocaleString("es-EC", {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+// Arma el diccionario de etiquetas {tag: valor} según el tipo de plantilla seleccionado.
+function buildTagData(template){
+  const firma = partesFecha(""); // fecha de firma = hoy
+  const inicio = $("genStart").value;
+  const prueba = partesFechaMasDias(inicio, 90);
+
+  const data = {
+    ciudad: $("genCity").value || "",
+    dia_firma: firma.dia, mes_firma: firma.mes, anio_firma: firma.anio,
+    fecha_firma_larga: fechaLarga(firma._d),
+    nombre_trabajador: $("genName").value || "",
+    nacionalidad: $("genNationality").value || "",
+    estado_civil: $("genCivil").value || "",
+    cedula: $("genIdNumber").value || "",
+    profesion: $("genProfession").value || "",
+    cargo: $("genJob").value || "",
+    sueldo: money($("genSalary").value),
+    lugar_trabajo: $("genWorkplace").value || "",
+    dia_prueba: prueba.dia, mes_prueba: prueba.mes, anio_prueba: prueba.anio
+  };
+
+  // Solo Indefinido 1, 2 y 3 tienen la cláusula de "inicio efectivo de la relación laboral"
+  if(["indef1","indef2","indef3"].includes(template)){
+    const ini = partesFecha(inicio);
+    data.dia_inicio = ini.dia; data.mes_inicio = ini.mes; data.anio_inicio = ini.anio;
+  }
+
+  // Solo Indefinido 1 y Obra tienen jornada/horario detallado
+  if(["indef1","obra"].includes(template)){
+    data.hora_inicio = $("genTimeFrom").value || "";
+    data.hora_fin = $("genTimeTo").value || "";
+    data.dia_desde = $("genDayFrom").value || "";
+    data.dia_hasta = $("genDayTo").value || "";
+    data.minutos_alimentacion = $("genBreak").value || "";
+  }
+
+  // Solo Obra tiene los campos de proyecto/cliente/contacto
+  if(template === "obra"){
+    data.proyecto = $("genProject").value || "";
+    data.cliente = $("genClient").value || "";
+    data.referencia_contractual = $("genCommercialContract").value || "";
+    data.alcance = $("genScope").value || "";
+    data.correo_trabajador = $("genEmail").value || "";
+    data.celular_trabajador = $("genPhone").value || "";
+    data.periodicidad_pago = $("genPayFrequency").value || "Mensual";
+  }
+
+  return data;
+}
+
+async function generateContractWord(){
   const template = $("genTemplate").value;
   if(!template){alert("Selecciona primero la plantilla o tipo de contrato.");return;}
   if(!$("genName").value.trim()){alert("Selecciona o escribe el colaborador.");return;}
-  if(["pasantia","sector","eventual"].includes(template)){
+  if(["pasantia","eventual"].includes(template)){
     alert("Esta plantilla todavía no está cargada. Primero debemos incorporar el Word maestro correspondiente.");
     return;
   }
-  previewGeneration();
-  alert("Los datos quedaron preparados. El siguiente paso será conectarlos con la plantilla Word maestra para generar el archivo.");
+
+  const btn = $("genWordBtn");
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = "Generando...";
+
+  try{
+    // 1) Buscar la plantilla activa para este tipo de contrato
+    const { data: plantilla, error: errPlantilla } = await sb
+      .from("plantillas_contrato")
+      .select("archivo_url, nombre_archivo")
+      .eq("tipo_contrato", template)
+      .eq("activo", true)
+      .maybeSingle();
+
+    if(errPlantilla || !plantilla){
+      alert("No se encontró una plantilla activa para este tipo de contrato en la base de datos (tabla plantillas_contrato).");
+      return;
+    }
+
+    // 2) Descargar el .docx desde Supabase Storage
+    const { data: archivo, error: errStorage } = await sb
+      .storage.from("plantillas-contratos")
+      .download(plantilla.archivo_url);
+
+    if(errStorage || !archivo){
+      alert("No se pudo descargar la plantilla desde Storage: " + (errStorage?.message || "error desconocido"));
+      return;
+    }
+
+    // 3) Rellenar la plantilla con docxtemplater
+    const arrayBuffer = await archivo.arrayBuffer();
+    const zip = new PizZip(arrayBuffer);
+    const doc = new window.docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      nullGetter: () => "" // si falta un dato, deja el espacio en blanco en vez de romper
+    });
+
+    doc.render(buildTagData(template));
+
+    const out = doc.getZip().generate({
+      type: "blob",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    });
+
+    // 4) Descargar el archivo generado
+    const nombreLimpio = ($("genName").value || "contrato").trim().replace(/[^\w\s-]/g,"").replace(/\s+/g,"_");
+    saveAs(out, `Contrato_${nombreLimpio}.docx`);
+
+  }catch(err){
+    console.error(err);
+    alert("Ocurrió un error generando el contrato: " + (err?.message || err));
+  }finally{
+    btn.disabled = false; btn.textContent = textoOriginal;
+  }
 }
 
 function navigateModule(name){
@@ -2128,9 +2272,13 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   });
 
   $("genEmployee").addEventListener("change",fillGenerationEmployee);
+  $("genTemplate").addEventListener("change",()=>{
+    $("projectFields").style.display = ($("genTemplate").value === "obra") ? "" : "none";
+  });
+  $("projectFields").style.display = "none";
   $("genPreviewBtn").addEventListener("click",previewGeneration);
   $("genClearBtn").addEventListener("click",clearGeneration);
-  $("genWordBtn").addEventListener("click",prepareContract);
+  $("genWordBtn").addEventListener("click",generateContractWord);
   $("vacSearch").addEventListener("input",renderVacations);
 
   ["searchInput","typeFilter","bossFilter","statusFilter"].forEach(id=>{
