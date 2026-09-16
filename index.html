@@ -189,6 +189,7 @@
 
     .kpi.clickable{cursor:pointer;transition:transform .15s ease,box-shadow .15s ease}
     .kpi.clickable:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(31,56,100,.14)}
+    .kpi.clickable.active{box-shadow:0 0 0 2px var(--navy) inset,0 14px 34px rgba(31,56,100,.14)}
     .type-grid{display:flex;flex-wrap:wrap;gap:9px}
     .type-chip{
       border:1px solid #dfe7ef;background:#f8fafc;color:var(--navy);border-radius:999px;
@@ -616,10 +617,10 @@
             <div><button class="small-btn" id="evalRefreshBtn">↻ Actualizar evaluaciones</button></div>
           </div>
           <section class="kpis" style="margin-bottom:16px">
-            <article class="kpi yellow"><div class="label">Pendientes</div><div class="value" id="evalPendingKpi">0</div><div class="sub">Esperando respuesta</div></article>
-            <article class="kpi green"><div class="label">Recibidas</div><div class="value" id="evalReceivedKpi">0</div><div class="sub">Con respuesta o archivo</div></article>
-            <article class="kpi blue"><div class="label">Renovar / continuar</div><div class="value" id="evalContinueKpi">0</div><div class="sub">Decisiones positivas</div></article>
-            <article class="kpi red"><div class="label">No renovar</div><div class="value" id="evalStopKpi">0</div><div class="sub">Requieren gestión de salida</div></article>
+            <article class="kpi yellow clickable" data-kpi="pendiente"><div class="label">Pendientes</div><div class="value" id="evalPendingKpi">0</div><div class="sub">Esperando respuesta</div></article>
+            <article class="kpi green clickable" data-kpi="recibida"><div class="label">Recibidas</div><div class="value" id="evalReceivedKpi">0</div><div class="sub">Con respuesta o archivo</div></article>
+            <article class="kpi blue clickable" data-kpi="continuar_renovar"><div class="label">Renovar / continuar</div><div class="value" id="evalContinueKpi">0</div><div class="sub">Decisiones positivas</div></article>
+            <article class="kpi red clickable" data-kpi="prescindir"><div class="label">No renovar</div><div class="value" id="evalStopKpi">0</div><div class="sub">Requieren gestión de salida</div></article>
           </section>
           <div class="toolbar-card">
             <div class="toolbar-flex">
@@ -1731,10 +1732,24 @@ async function loadEvaluations(){
   if(error){$("evalBody").innerHTML=`<tr><td colspan="9">${esc(error.message)}</td></tr>`;return;}
   evaluations=data||[];evaluationsLoaded=true;renderEvaluations();
 }
+let evalActiveKpi=null;
+function setEvalKpiFilter(key){
+  evalActiveKpi=(evalActiveKpi===key)?null:key;
+  document.querySelectorAll("#module-evaluaciones .kpi.clickable").forEach(el=>el.classList.toggle("active",el.dataset.kpi===evalActiveKpi));
+  renderEvaluations();
+}
+function evalMatchesKpi(x){
+  if(!evalActiveKpi)return true;
+  if(evalActiveKpi==="pendiente")return x.estado==="pendiente";
+  if(evalActiveKpi==="recibida")return x.estado==="recibida";
+  if(evalActiveKpi==="continuar_renovar")return ["continuar","renovar","extender_indefinido"].includes(x.decision);
+  if(evalActiveKpi==="prescindir")return x.decision==="prescindir";
+  return true;
+}
 function renderEvaluations(){
   const q=($("evalSearch")?.value||"").toLowerCase().trim(), st=$("evalStatus")?.value||"";
   const visibles=evaluations.filter(x=>x.estado!=="anulada");
-  const rows=visibles.filter(x=>(!st||x.estado===st)&&(!q||[x.empleado_nombre,x.jefe_nombre,x.tipo_plazo,x.decision,x.proxima_alerta].join(" ").toLowerCase().includes(q)));
+  const rows=visibles.filter(x=>(!st||x.estado===st)&&evalMatchesKpi(x)&&(!q||[x.empleado_nombre,x.jefe_nombre,x.tipo_plazo,x.decision,x.proxima_alerta].join(" ").toLowerCase().includes(q)));
   const pending=visibles.filter(x=>x.estado==="pendiente").length, received=visibles.filter(x=>x.estado==="recibida").length;
   $("evalPendingKpi").textContent=pending;$("evalReceivedKpi").textContent=received;$("sumEvaluations").textContent=pending;
   $("evalContinueKpi").textContent=visibles.filter(x=>["continuar","renovar","extender_indefinido"].includes(x.decision)).length;
@@ -2280,6 +2295,10 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 
   document.querySelectorAll(".kpi.clickable[data-drill]").forEach(card=>{
     card.addEventListener("click",()=>drillTo(card.dataset.drill));
+  });
+
+  document.querySelectorAll("#module-evaluaciones .kpi.clickable[data-kpi]").forEach(card=>{
+    card.addEventListener("click",()=>setEvalKpiFilter(card.dataset.kpi));
   });
 
   $("vacRefreshBtn").addEventListener("click",()=>{
