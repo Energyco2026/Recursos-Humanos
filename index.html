@@ -1739,12 +1739,13 @@ function renderEvaluations(){
   $("evalPendingKpi").textContent=pending;$("evalReceivedKpi").textContent=received;$("sumEvaluations").textContent=pending;
   $("evalContinueKpi").textContent=visibles.filter(x=>["continuar","renovar","extender_indefinido"].includes(x.decision)).length;
   $("evalStopKpi").textContent=visibles.filter(x=>x.decision==="prescindir").length;
-  $("evalBody").innerHTML=rows.map(x=>`<tr><td><b>${esc(x.empleado_nombre)}</b></td><td>${esc(x.tipo_plazo==="fin_contrato"?"Fin contrato":x.tipo_plazo+" días")}</td><td>${esc(x.jefe_nombre||"—")}</td><td><span class="badge ${x.estado==="recibida"?"ACTIVO":"PROXIMO_HITO"}">${esc(x.estado)}</span></td><td>${x.fecha_recibida?new Date(x.fecha_recibida).toLocaleDateString("es-EC"):"—"}</td><td>${esc(x.decision||"—")}</td><td>${esc(x.proxima_alerta||"—")}</td><td>${x.archivo_url?`<button class="btn-mini blue" data-eval-open="${x.token}">Abrir</button>`:"—"}</td><td><button class="btn-mini green" data-eval-send="${x.token}">Enviar enlace</button> <button class="btn-mini" data-eval-upload="${x.token}">Subir</button> <button class="btn-mini" data-eval-manage="${x.token}">Gestionar</button>${x.estado==="pendiente"?` <button class="btn-mini danger" data-eval-delete="${x.token}">Eliminar</button>`:""}</td></tr>`).join("")||'<tr><td colspan="9">No hay evaluaciones para este filtro.</td></tr>';
+  $("evalBody").innerHTML=rows.map(x=>`<tr><td><b>${esc(x.empleado_nombre)}</b></td><td>${esc(x.tipo_plazo==="fin_contrato"?"Fin contrato":x.tipo_plazo+" días")}</td><td>${esc(x.jefe_nombre||"—")}</td><td><span class="badge ${x.estado==="recibida"?"ACTIVO":"PROXIMO_HITO"}">${esc(x.estado)}</span></td><td>${x.fecha_recibida?new Date(x.fecha_recibida).toLocaleDateString("es-EC"):"—"}</td><td>${esc(x.decision||"—")}</td><td>${esc(x.proxima_alerta||"—")}</td><td>${x.archivo_url?`<button class="btn-mini blue" data-eval-open="${x.token}">Abrir</button>`:"—"}</td><td><button class="btn-mini green" data-eval-send="${x.token}">Enviar enlace</button> <button class="btn-mini" data-eval-upload="${x.token}">Subir</button> <button class="btn-mini" data-eval-manage="${x.token}">Gestionar</button>${x.estado==="pendiente"?` <button class="btn-mini danger" data-eval-delete="${x.token}">Eliminar</button>`:x.estado==="recibida"?` <button class="btn-mini danger" data-eval-reset="${x.token}">Reiniciar</button>`:""}</td></tr>`).join("")||'<tr><td colspan="9">No hay evaluaciones para este filtro.</td></tr>';
   document.querySelectorAll("[data-eval-send]").forEach(b=>b.onclick=()=>resendEval(b.dataset.evalSend));
   document.querySelectorAll("[data-eval-upload]").forEach(b=>b.onclick=()=>{selectedEvalToken=b.dataset.evalUpload;$("evalFileInput").click()});
   document.querySelectorAll("[data-eval-manage]").forEach(b=>b.onclick=()=>openEvalManager(b.dataset.evalManage));
   document.querySelectorAll("[data-eval-open]").forEach(b=>b.onclick=()=>openEvalFile(b.dataset.evalOpen));
   document.querySelectorAll("[data-eval-delete]").forEach(b=>b.onclick=()=>deleteEvaluation(b.dataset.evalDelete));
+  document.querySelectorAll("[data-eval-reset]").forEach(b=>b.onclick=()=>resetEvaluation(b.dataset.evalReset));
 }
 async function deleteEvaluation(token){
   const x=evaluations.find(e=>e.token===token); if(!x)return;
@@ -1757,6 +1758,21 @@ async function deleteEvaluation(token){
     const upd=await sb.from("alertas_evaluacion").update({estado:"anulada",actualizado_en:new Date().toISOString()}).eq("token",token);
     if(upd.error){alert("No se pudo eliminar/anular la evaluación: "+upd.error.message);return;}
   }
+  evaluationsLoaded=false;
+  await loadEvaluations();
+  updateKpis();
+  applyFilters();
+}
+async function resetEvaluation(token){
+  const x=evaluations.find(e=>e.token===token); if(!x)return;
+  if(x.estado!=="recibida"){ alert("Esta opción solo aplica a evaluaciones ya recibidas."); return; }
+  if(!confirm(`¿Reiniciar la evaluación de ${x.empleado_nombre}?\n\nSe borrará el archivo subido y las respuestas, y volverá a estado "pendiente" para recibir una nueva evaluación.`))return;
+  if(x.archivo_url){
+    const rm=await sb.storage.from("evaluaciones-rrhh").remove([x.archivo_url]);
+    if(rm.error){ alert("No se pudo borrar el archivo anterior: "+rm.error.message+"\n\nNo se reinició la evaluación."); return; }
+  }
+  const upd=await sb.from("alertas_evaluacion").update({estado:"pendiente",archivo_url:null,decision:null,desempeno:null,comentarios:null,evaluador_nombre:null,fecha_recibida:null,actualizado_en:new Date().toISOString()}).eq("token",token);
+  if(upd.error){alert("No se pudo reiniciar la evaluación: "+upd.error.message);return;}
   evaluationsLoaded=false;
   await loadEvaluations();
   updateKpis();
