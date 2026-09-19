@@ -354,13 +354,17 @@
     .commission-kpis .mini{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}.commission-kpis .mini .l{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase}.commission-kpis .mini .v{font-size:19px;font-weight:800;color:var(--navy);margin-top:6px}
     .commission-panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px}
     .commission-panel h3{margin:0 0 14px;color:var(--navy)}
+    .cost-private{display:flex;align-items:center;gap:8px;background:#eef8df;color:#527d00;border:1px solid #d5e9a8;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:800}
+    .cost-bars{display:grid;gap:12px}.cost-bar-row{display:grid;grid-template-columns:minmax(150px,1.4fr) 3fr 120px;gap:12px;align-items:center;font-size:13px}.cost-bar-name{font-weight:800;color:var(--navy)}
+    .cost-bar-track{height:12px;border-radius:999px;background:#edf2f7;overflow:hidden}.cost-bar-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#7db900,#a5cf39)}.cost-bar-value{text-align:right;font-weight:800;color:var(--navy)}
+    .cost-assumptions{margin-top:12px;font-size:12px;line-height:1.5;color:var(--muted)}
     .invoice-check{width:18px;height:18px}.right{text-align:right!important}.center{text-align:center!important}
     .participant-row{display:grid;grid-template-columns:2fr .8fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px}
     .participant-row input,.participant-row select{width:100%;padding:9px;border:1px solid #d7dee9;border-radius:9px}
     .saved-card{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;background:#fbfdff}
     .modal.wide{width:min(880px,calc(100vw - 32px))}
     @media(max-width:1000px){.commission-kpis{grid-template-columns:repeat(3,1fr)}.eval-grid,.commission-grid{grid-template-columns:1fr 1fr}.participant-row{grid-template-columns:1fr 1fr}.participant-row .wide-part{grid-column:1/-1}}
-    @media(max-width:650px){.commission-kpis{grid-template-columns:1fr 1fr}.eval-grid,.commission-grid{grid-template-columns:1fr}.eval-grid .span-2,.commission-grid .span-2,.eval-grid .span-3,.commission-grid .span-3{grid-column:auto}.participant-row{grid-template-columns:1fr}}
+    @media(max-width:650px){.commission-kpis{grid-template-columns:1fr 1fr}.eval-grid,.commission-grid{grid-template-columns:1fr}.eval-grid .span-2,.commission-grid .span-2,.eval-grid .span-3,.commission-grid .span-3{grid-column:auto}.participant-row{grid-template-columns:1fr}.cost-bar-row{grid-template-columns:1fr}.cost-bar-value{text-align:left}}
 
     /* IMPRESIÓN — comprobante de comisión / certificado */
     #printArea{display:none}
@@ -472,6 +476,7 @@
       <button class="nav-btn" data-module="vacaciones"><span class="nav-icon">☀</span>Vacaciones</button>
       <button class="nav-btn" data-module="certificados"><span class="nav-icon">▣</span>Certificados laborales</button>
       <button class="nav-btn" data-module="roles"><span class="nav-icon">$</span>Roles de pago</button>
+      <button class="nav-btn" data-module="costos"><span class="nav-icon">🔒</span>Costo de personal</button>
     </aside>
     <div class="content-area">
       <main>
@@ -961,6 +966,62 @@
             </div>
           </section>
         </section>
+
+        <section id="module-costos" class="module">
+          <div class="page-heading">
+            <div><h2>Costo de personal</h2><p>Análisis mensual de remuneraciones, aportes patronales y provisiones por departamento.</p></div>
+            <div class="cost-private">🔒 Control gerencial privado</div>
+          </div>
+
+          <div class="toolbar-card">
+            <div class="toolbar-flex">
+              <div class="field-lite"><label>Periodo</label><input id="costMonthFilter" type="month"></div>
+              <div class="field-lite"><label>Departamento</label><select id="costDepartmentFilter"><option value="">Todos los departamentos</option></select></div>
+              <div class="field-lite"><label>Colaborador</label><select id="costEmployeeFilter"><option value="">Todos los colaboradores</option></select></div>
+              <div class="field-lite"><label>SBU para décimo cuarto (USD)</label><input id="costSbu" type="number" min="0" step="0.01" value="482"></div>
+              <div class="field-lite"><label>IESS patronal estimado (%)</label><input id="costIessRate" type="number" min="0" step="0.01" value="11.15"></div>
+            </div>
+            <div class="cost-assumptions">Cálculo: remuneración mensual + IESS patronal + décimo tercero + décimo cuarto + vacaciones + fondos de reserva registrados en Odoo. Los valores son una estimación gerencial y no reemplazan la liquidación oficial de nómina.</div>
+          </div>
+
+          <div id="costLoading" class="loading hidden">Calculando costo de personal...</div>
+          <div id="costError" class="status-note err hidden"></div>
+          <div id="costContent" class="hidden">
+            <section class="commission-kpis">
+              <article class="mini"><div class="l">Costo total mensual</div><div class="v" id="costTotal">$0,00</div></article>
+              <article class="mini"><div class="l">Colaboradores</div><div class="v" id="costEmployees">0</div></article>
+              <article class="mini"><div class="l">Costo promedio</div><div class="v" id="costAverage">$0,00</div></article>
+              <article class="mini"><div class="l">Remuneración</div><div class="v" id="costRemuneration">$0,00</div></article>
+              <article class="mini"><div class="l">IESS patronal</div><div class="v" id="costIess">$0,00</div></article>
+              <article class="mini"><div class="l">Beneficios y provisiones</div><div class="v" id="costBenefits">$0,00</div></article>
+            </section>
+
+            <section class="commission-panel">
+              <h3>Costo por departamento</h3>
+              <div id="costDepartmentBars" class="cost-bars"></div>
+            </section>
+
+            <section class="commission-panel">
+              <h3>Resumen por departamento</h3>
+              <div class="commission-table-wrap">
+                <table class="commission-table">
+                  <thead><tr><th>Departamento</th><th class="center">Colaboradores</th><th class="right">Remuneración</th><th class="right">IESS patronal</th><th class="right">Provisiones</th><th class="right">Costo total</th></tr></thead>
+                  <tbody id="costDepartmentBody"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="commission-panel">
+              <h3>Detalle por colaborador</h3>
+              <div class="commission-table-wrap">
+                <table class="commission-table">
+                  <thead><tr><th>Colaborador</th><th>Departamento</th><th class="right">Remuneración</th><th class="right">IESS patronal</th><th class="right">13.º</th><th class="right">14.º</th><th class="right">Vacaciones</th><th class="right">F. reserva</th><th class="right">Costo total</th></tr></thead>
+                  <tbody id="costEmployeeBody"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
       </main>
     </div>
   </div>
@@ -1032,6 +1093,7 @@ let editingCalcId = null;
 let anticiposComisiones = {};
 let rolesLoaded = false;
 let allRoles = [];
+let costsLoaded = false;
 
 const $ = id => document.getElementById(id);
 
@@ -1607,6 +1669,7 @@ function navigateModule(name){
   if(name==="evaluaciones" && !evaluationsLoaded) loadEvaluations();
   if(name==="comisiones" && !commissionsLoaded) loadCommissionData();
   if(name==="roles" && !rolesLoaded) loadRoles();
+  if(name==="costos" && !costsLoaded) loadCosts();
 }
 
 function drillTo(mode){
@@ -2268,6 +2331,112 @@ function renderRoles(){
   $("rolBody").innerHTML=rows.map(r=>`<tr><td>${dateEC(r.periodo_desde)} — ${dateEC(r.periodo_hasta)}</td><td>${esc(r.empleado_nombre||"—")}</td><td>${esc(r.area||"—")}</td><td>${esc(r.cargo||"—")}</td><td>${money(r.total_ingresos)}</td><td>${money(r.total_egresos)}</td><td>${money(r.neto_recibir)}</td></tr>`).join("");
 }
 
+/* ============================================================
+   COSTO DE PERSONAL — ESTIMACIÓN GERENCIAL
+============================================================ */
+function normalizeCostDepartment(value){
+  const parts=String(value||"Sin departamento").split("/").map(x=>x.trim()).filter(Boolean);
+  const unique=[...new Set(parts)];
+  return unique.join(" / ")||"Sin departamento";
+}
+
+function consolidateMonthlyCosts(month){
+  const grouped=new Map();
+  allRoles.filter(r=>String(r.periodo_desde||"").slice(0,7)===month).forEach(r=>{
+    const employee=r.odoo_employee_id||r.identificacion||r.empleado_nombre;
+    if(!employee)return;
+    const key=String(employee);
+    const current=grouped.get(key)||{
+      employee:r.empleado_nombre||"Sin nombre",department:normalizeCostDepartment(r.area),
+      maxSalary:0,maxCommissions:0,maxOvertime:0,maxReserve:0,maxIncome:0,areaIncome:-1
+    };
+    const income=Number(r.total_ingresos||0);
+    current.employee=r.empleado_nombre||current.employee;
+    if(r.area && income>=current.areaIncome){current.department=normalizeCostDepartment(r.area);current.areaIncome=income;}
+    current.maxSalary=Math.max(current.maxSalary,Number(r.sueldo_ganado||0));
+    current.maxCommissions=Math.max(current.maxCommissions,Number(r.comisiones||0));
+    current.maxOvertime=Math.max(current.maxOvertime,Number(r.horas_extras||0));
+    current.maxReserve=Math.max(current.maxReserve,Number(r.fondos_reserva||0));
+    current.maxIncome=Math.max(current.maxIncome,income);
+    grouped.set(key,current);
+  });
+  return [...grouped.values()];
+}
+
+function calculateEmployeeCost(row,sbu,iessRate){
+  const remuneration=Math.max(
+    row.maxIncome-row.maxReserve,
+    row.maxSalary+row.maxCommissions+row.maxOvertime
+  );
+  const iess=remuneration*iessRate/100;
+  const thirteenth=remuneration/12;
+  const fourteenth=sbu/12;
+  const vacations=remuneration/24;
+  const reserve=row.maxReserve;
+  const benefits=thirteenth+fourteenth+vacations+reserve;
+  return {...row,remuneration,iess,thirteenth,fourteenth,vacations,reserve,benefits,total:remuneration+iess+benefits};
+}
+
+function buildCostFilters(){
+  const months=[...new Set(allRoles.map(r=>String(r.periodo_desde||"").slice(0,7)).filter(x=>/^\d{4}-\d{2}$/.test(x)))].sort().reverse();
+  if(!$('costMonthFilter').value && months.length)$('costMonthFilter').value=months[0];
+  const month=$('costMonthFilter').value;
+  const base=consolidateMonthlyCosts(month);
+  const oldDepartment=$('costDepartmentFilter').value;
+  const departments=[...new Set(base.map(x=>x.department))].sort((a,b)=>a.localeCompare(b,'es'));
+  $('costDepartmentFilter').innerHTML='<option value="">Todos los departamentos</option>'+departments.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  if(departments.includes(oldDepartment))$('costDepartmentFilter').value=oldDepartment;
+  buildCostEmployeeFilter(base);
+}
+
+function buildCostEmployeeFilter(base=consolidateMonthlyCosts($('costMonthFilter').value)){
+  const department=$('costDepartmentFilter').value;
+  const oldEmployee=$('costEmployeeFilter').value;
+  const employees=base.filter(x=>!department||x.department===department).map(x=>x.employee).sort((a,b)=>a.localeCompare(b,'es'));
+  $('costEmployeeFilter').innerHTML='<option value="">Todos los colaboradores</option>'+employees.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  if(employees.includes(oldEmployee))$('costEmployeeFilter').value=oldEmployee;
+}
+
+async function loadCosts(){
+  $('costLoading').classList.remove('hidden');$('costError').classList.add('hidden');$('costContent').classList.add('hidden');
+  if(!rolesLoaded)await loadRoles();
+  $('costLoading').classList.add('hidden');
+  if(!rolesLoaded){$('costError').textContent='No fue posible cargar la información privada de roles de pago. Verifica tu acceso de RRHH.';$('costError').classList.remove('hidden');return;}
+  buildCostFilters();
+  costsLoaded=true;
+  renderCosts();
+}
+
+function renderCosts(){
+  const month=$('costMonthFilter').value;
+  const department=$('costDepartmentFilter').value;
+  const employee=$('costEmployeeFilter').value;
+  const sbu=Math.max(0,Number($('costSbu').value||0));
+  const iessRate=Math.max(0,Number($('costIessRate').value||0));
+  const rows=consolidateMonthlyCosts(month).map(x=>calculateEmployeeCost(x,sbu,iessRate)).filter(x=>(!department||x.department===department)&&(!employee||x.employee===employee)).sort((a,b)=>b.total-a.total);
+  const sum=field=>rows.reduce((total,row)=>total+Number(row[field]||0),0);
+  const total=sum('total'),remuneration=sum('remuneration'),iess=sum('iess'),benefits=sum('benefits');
+  $('costTotal').textContent=money(total);
+  $('costEmployees').textContent=rows.length;
+  $('costAverage').textContent=money(rows.length?total/rows.length:0);
+  $('costRemuneration').textContent=money(remuneration);
+  $('costIess').textContent=money(iess);
+  $('costBenefits').textContent=money(benefits);
+
+  const departments=new Map();
+  rows.forEach(row=>{
+    const item=departments.get(row.department)||{name:row.department,employees:0,remuneration:0,iess:0,benefits:0,total:0};
+    item.employees++;item.remuneration+=row.remuneration;item.iess+=row.iess;item.benefits+=row.benefits;item.total+=row.total;
+    departments.set(row.department,item);
+  });
+  const departmentRows=[...departments.values()].sort((a,b)=>b.total-a.total);
+  const maxDepartment=Math.max(...departmentRows.map(x=>x.total),1);
+  $('costDepartmentBars').innerHTML=departmentRows.length?departmentRows.map(x=>`<div class="cost-bar-row"><div class="cost-bar-name">${esc(x.name)} · ${x.employees}</div><div class="cost-bar-track"><div class="cost-bar-fill" style="width:${Math.max(2,x.total/maxDepartment*100).toFixed(2)}%"></div></div><div class="cost-bar-value">${money(x.total)}</div></div>`).join(''):'<div class="empty">No hay datos para los filtros seleccionados.</div>';
+  $('costDepartmentBody').innerHTML=departmentRows.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td class="center">${x.employees}</td><td class="right">${money(x.remuneration)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.benefits)}</td><td class="right"><b>${money(x.total)}</b></td></tr>`).join('');
+  $('costEmployeeBody').innerHTML=rows.map(x=>`<tr><td><b>${esc(x.employee)}</b></td><td>${esc(x.department)}</td><td class="right">${money(x.remuneration)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.thirteenth)}</td><td class="right">${money(x.fourteenth)}</td><td class="right">${money(x.vacations)}</td><td class="right">${money(x.reserve)}</td><td class="right"><b>${money(x.total)}</b></td></tr>`).join('');
+  $('costContent').classList.remove('hidden');
+}
+
 function exportCSV(){
   const cols = [
     ["empleado_nombre","Colaborador"],["cargo","Cargo"],["jefe_nombre","Jefe"],
@@ -2325,9 +2494,14 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   $("certPreviewBtn").addEventListener("click",previewCertificate);
   $("certWordBtn").addEventListener("click",downloadCertificate);
 
-  $("rolesRefreshBtn").addEventListener("click",()=>{rolesLoaded=false;loadRoles()});
+  $("rolesRefreshBtn").addEventListener("click",()=>{rolesLoaded=false;costsLoaded=false;loadRoles()});
   $("rolEmployeeFilter").addEventListener("change",renderRoles);
   $("rolMonthFilter").addEventListener("change",renderRoles);
+  $("costMonthFilter").addEventListener("change",()=>{buildCostFilters();renderCosts()});
+  $("costDepartmentFilter").addEventListener("change",()=>{buildCostEmployeeFilter();renderCosts()});
+  $("costEmployeeFilter").addEventListener("change",renderCosts);
+  $("costSbu").addEventListener("input",renderCosts);
+  $("costIessRate").addEventListener("input",renderCosts);
 
   document.querySelectorAll(".nav-btn").forEach(btn=>{
     btn.addEventListener("click",()=>navigateModule(btn.dataset.module));
