@@ -358,6 +358,10 @@
     .cost-bars{display:grid;gap:12px}.cost-bar-row{display:grid;grid-template-columns:minmax(150px,1.4fr) 3fr 120px;gap:12px;align-items:center;font-size:13px}.cost-bar-name{font-weight:800;color:var(--navy)}
     .cost-bar-track{height:12px;border-radius:999px;background:#edf2f7;overflow:hidden}.cost-bar-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#7db900,#a5cf39)}.cost-bar-value{text-align:right;font-weight:800;color:var(--navy)}
     .cost-assumptions{margin-top:12px;font-size:12px;line-height:1.5;color:var(--muted)}
+    .cost-trend-head{display:flex;align-items:end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:10px}.cost-trend-head h3{margin-bottom:4px}.cost-trend-head p{margin:0;color:var(--muted);font-size:13px}
+    .cost-trend-control{min-width:250px}.cost-trend-control label{display:block;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;margin-bottom:5px}.cost-trend-control select{width:100%;padding:10px 12px;border:1px solid #d7dee9;border-radius:10px;background:#fff;color:var(--navy)}
+    .cost-trend-summary{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 4px}.cost-trend-chip{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:8px 11px;color:var(--muted);font-size:12px}.cost-trend-chip b{color:var(--navy);font-size:14px}.cost-trend-chip.positive{background:#eef8df;color:#527d00}.cost-trend-chip.negative{background:#fff1f2;color:#b91c1c}
+    .cost-trend-chart{width:100%;overflow-x:auto}.cost-trend-chart svg{display:block;width:100%;min-width:680px;height:auto}.cost-trend-empty{padding:32px;text-align:center;color:var(--muted)}
     .invoice-check{width:18px;height:18px}.right{text-align:right!important}.center{text-align:center!important}
     .participant-row{display:grid;grid-template-columns:2fr .8fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px}
     .participant-row input,.participant-row select{width:100%;padding:9px;border:1px solid #d7dee9;border-radius:9px}
@@ -994,6 +998,22 @@
               <article class="mini"><div class="l">Remuneración</div><div class="v" id="costRemuneration">$0,00</div></article>
               <article class="mini"><div class="l">IESS patronal</div><div class="v" id="costIess">$0,00</div></article>
               <article class="mini"><div class="l">Beneficios y provisiones</div><div class="v" id="costBenefits">$0,00</div></article>
+            </section>
+
+            <section class="commission-panel">
+              <div class="cost-trend-head">
+                <div><h3>Tendencia mensual</h3><p>Evolución desde enero hasta el periodo seleccionado. Las comisiones están excluidas.</p></div>
+                <div class="cost-trend-control">
+                  <label>Indicador de la línea</label>
+                  <select id="costTrendMetric">
+                    <option value="headcount">Número de colaboradores</option>
+                    <option value="cost">Costo estructural sin comisiones</option>
+                    <option value="remuneration">Remuneración sin comisiones</option>
+                  </select>
+                </div>
+              </div>
+              <div id="costTrendSummary" class="cost-trend-summary"></div>
+              <div id="costTrendChart" class="cost-trend-chart" role="img" aria-label="Tendencia mensual del costo de personal"></div>
             </section>
 
             <section class="commission-panel">
@@ -2377,6 +2397,78 @@ function calculateEmployeeCost(row,sbu,iessRate){
   return {...row,remuneration,iess,thirteenth,fourteenth,vacations,reserve,benefits,total:remuneration+iess+benefits};
 }
 
+function calculateStructuralCost(row,sbu,iessRate){
+  const remuneration=Math.max(
+    0,
+    row.maxIncome-row.maxReserve-row.maxCommissions,
+    row.maxSalary+row.maxOvertime
+  );
+  const iess=remuneration*iessRate/100;
+  const thirteenth=remuneration/12;
+  const fourteenth=sbu/12;
+  const vacations=remuneration/24;
+  const reserve=row.maxReserve;
+  const benefits=thirteenth+fourteenth+vacations+reserve;
+  return {...row,remuneration,iess,thirteenth,fourteenth,vacations,reserve,benefits,total:remuneration+iess+benefits};
+}
+
+function compactMoney(value){
+  return '$'+new Intl.NumberFormat('es-EC',{notation:'compact',maximumFractionDigits:1}).format(Number(value||0));
+}
+
+function renderCostTrend(){
+  const selectedMonth=$('costMonthFilter').value;
+  if(!selectedMonth)return;
+  const year=selectedMonth.slice(0,4);
+  const department=$('costDepartmentFilter').value;
+  const employee=$('costEmployeeFilter').value;
+  const sbu=Math.max(0,Number($('costSbu').value||0));
+  const iessRate=Math.max(0,Number($('costIessRate').value||0));
+  const metric=$('costTrendMetric').value;
+  const labels=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const available=new Set(allRoles.map(r=>String(r.periodo_desde||'').slice(0,7)));
+  const lastIndex=Math.max(0,Number(selectedMonth.slice(5,7))-1);
+  const points=[];
+  for(let index=0;index<=lastIndex;index++){
+    const month=`${year}-${String(index+1).padStart(2,'0')}`;
+    if(!available.has(month))continue;
+    const rows=consolidateMonthlyCosts(month)
+      .filter(x=>(!department||x.department===department)&&(!employee||x.employee===employee))
+      .map(x=>calculateStructuralCost(x,sbu,iessRate));
+    const value=metric==='headcount'?rows.length:rows.reduce((sum,row)=>sum+(metric==='cost'?row.total:row.remuneration),0);
+    points.push({month,label:labels[index],value});
+  }
+
+  if(!points.length){
+    $('costTrendSummary').innerHTML='';
+    $('costTrendChart').innerHTML='<div class="cost-trend-empty">No hay datos mensuales para esta selección.</div>';
+    return;
+  }
+
+  const first=points[0].value,last=points[points.length-1].value,change=last-first;
+  const pct=first?change/first*100:0;
+  const display=value=>metric==='headcount'?String(Math.round(value)):money(value);
+  const changeText=`${change>=0?'+':''}${metric==='headcount'?Math.round(change):money(change)} (${change>=0?'+':''}${pct.toFixed(1)}%)`;
+  $('costTrendSummary').innerHTML=`<div class="cost-trend-chip"><span>${points[0].label}</span> <b>${display(first)}</b></div><div class="cost-trend-chip"><span>${points[points.length-1].label}</span> <b>${display(last)}</b></div><div class="cost-trend-chip ${change>0?'positive':change<0?'negative':''}"><span>Cambio</span> <b>${changeText}</b></div>`;
+
+  const width=840,height=300,left=66,right=24,top=38,bottom=48;
+  const chartWidth=width-left-right,chartHeight=height-top-bottom;
+  const values=points.map(x=>x.value);
+  let min=Math.min(...values),max=Math.max(...values);
+  const padding=Math.max((max-min)*0.18,metric==='headcount'?2:max*0.08,1);
+  min=Math.max(0,min-padding);max=max+padding;
+  if(max===min)max=min+1;
+  const x=index=>left+(points.length===1?chartWidth/2:index*chartWidth/(points.length-1));
+  const y=value=>top+(max-value)/(max-min)*chartHeight;
+  const line=points.map((point,index)=>`${index?'L':'M'} ${x(index).toFixed(1)} ${y(point.value).toFixed(1)}`).join(' ');
+  const area=`${line} L ${x(points.length-1).toFixed(1)} ${top+chartHeight} L ${x(0).toFixed(1)} ${top+chartHeight} Z`;
+  const ticks=Array.from({length:5},(_,i)=>min+(max-min)*(4-i)/4);
+  const tickLabel=value=>metric==='headcount'?String(Math.round(value)):compactMoney(value);
+  const grid=ticks.map(value=>`<line x1="${left}" y1="${y(value)}" x2="${width-right}" y2="${y(value)}" stroke="#e6ebf2" stroke-width="1"/><text x="${left-10}" y="${y(value)+4}" text-anchor="end" font-size="11" fill="#718096">${tickLabel(value)}</text>`).join('');
+  const dots=points.map((point,index)=>`<g><circle cx="${x(index)}" cy="${y(point.value)}" r="5" fill="#7db900" stroke="#fff" stroke-width="3"><title>${point.label}: ${display(point.value)}</title></circle><text x="${x(index)}" y="${Math.max(15,y(point.value)-13)}" text-anchor="middle" font-size="11" font-weight="700" fill="#12325b">${metric==='headcount'?Math.round(point.value):compactMoney(point.value)}</text><text x="${x(index)}" y="${height-18}" text-anchor="middle" font-size="12" font-weight="700" fill="#52647a">${point.label}</text></g>`).join('');
+  $('costTrendChart').innerHTML=`<svg viewBox="0 0 ${width} ${height}" aria-hidden="true"><defs><linearGradient id="costTrendArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#a5cf39" stop-opacity=".28"/><stop offset="100%" stop-color="#a5cf39" stop-opacity=".02"/></linearGradient></defs>${grid}<path d="${area}" fill="url(#costTrendArea)"/><path d="${line}" fill="none" stroke="#6f9f00" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>${dots}</svg>`;
+}
+
 function buildCostFilters(){
   const months=[...new Set(allRoles.map(r=>String(r.periodo_desde||"").slice(0,7)).filter(x=>/^\d{4}-\d{2}$/.test(x)))].sort().reverse();
   if(!$('costMonthFilter').value && months.length)$('costMonthFilter').value=months[0];
@@ -2434,6 +2526,7 @@ function renderCosts(){
   $('costDepartmentBars').innerHTML=departmentRows.length?departmentRows.map(x=>`<div class="cost-bar-row"><div class="cost-bar-name">${esc(x.name)} · ${x.employees}</div><div class="cost-bar-track"><div class="cost-bar-fill" style="width:${Math.max(2,x.total/maxDepartment*100).toFixed(2)}%"></div></div><div class="cost-bar-value">${money(x.total)}</div></div>`).join(''):'<div class="empty">No hay datos para los filtros seleccionados.</div>';
   $('costDepartmentBody').innerHTML=departmentRows.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td class="center">${x.employees}</td><td class="right">${money(x.remuneration)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.benefits)}</td><td class="right"><b>${money(x.total)}</b></td></tr>`).join('');
   $('costEmployeeBody').innerHTML=rows.map(x=>`<tr><td><b>${esc(x.employee)}</b></td><td>${esc(x.department)}</td><td class="right">${money(x.remuneration)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.thirteenth)}</td><td class="right">${money(x.fourteenth)}</td><td class="right">${money(x.vacations)}</td><td class="right">${money(x.reserve)}</td><td class="right"><b>${money(x.total)}</b></td></tr>`).join('');
+  renderCostTrend();
   $('costContent').classList.remove('hidden');
 }
 
@@ -2502,6 +2595,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   $("costEmployeeFilter").addEventListener("change",renderCosts);
   $("costSbu").addEventListener("input",renderCosts);
   $("costIessRate").addEventListener("input",renderCosts);
+  $("costTrendMetric").addEventListener("change",renderCostTrend);
 
   document.querySelectorAll(".nav-btn").forEach(btn=>{
     btn.addEventListener("click",()=>navigateModule(btn.dataset.module));
