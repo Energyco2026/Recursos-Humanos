@@ -238,7 +238,7 @@
       background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
     }
     .filters{
-      display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;padding:16px;border-bottom:1px solid var(--line);
+      display:grid;grid-template-columns:2fr repeat(4,minmax(150px,1fr)) auto;gap:10px;padding:16px;border-bottom:1px solid var(--line);
     }
     .filters input,.filters select{
       width:100%;border:1px solid #dbe3ee;border-radius:10px;padding:10px 11px;background:#fff;outline:none;
@@ -539,7 +539,7 @@
       <article class="kpi">
         <div class="label">Colaboradores</div>
         <div class="value" id="kpiEmployees">0</div>
-        <div class="sub">Empleados únicos</div>
+        <div class="sub" id="kpiEmployeesSub">Empleados únicos</div>
       </article>
       <article class="kpi green">
         <div class="label">Indefinidos</div>
@@ -566,6 +566,7 @@
     <section class="panel">
       <div class="filters">
         <input class="search" id="searchInput" placeholder="Buscar colaborador, cargo o jefe...">
+        <select id="departmentFilter"><option value="">Todos los departamentos</option></select>
         <select id="typeFilter"><option value="">Todos los tipos de contrato</option></select>
         <select id="bossFilter"><option value="">Todos los jefes</option></select>
         <select id="statusFilter">
@@ -591,6 +592,7 @@
             <tr>
               <th data-sort="empleado_nombre">Colaborador</th>
               <th data-sort="cargo">Cargo</th>
+              <th data-sort="_departamento">Departamento</th>
               <th data-sort="jefe_nombre">Jefe</th>
               <th data-sort="tipo_contrato">Tipo contrato</th>
               <th data-sort="salario">Sueldo</th>
@@ -1070,6 +1072,19 @@ function antiquity(days){
   return months ? `${years}a ${months}m` : `${years} año${years===1?"":"s"}`;
 }
 
+function departmentOf(contract){
+  const candidates = [
+    contract.departamento,
+    contract.departamento_nombre,
+    contract.area,
+    contract.area_nombre,
+    contract.department,
+    contract.department_name
+  ];
+  const value = candidates.find(item=>String(item ?? "").trim());
+  return value ? String(value).trim() : "";
+}
+
 function statusLabel(s){
   const map = {
     ACTIVO:"Activo",
@@ -1137,7 +1152,10 @@ async function loadContracts(){
     return;
   }
 
-  allContracts = data || [];
+  allContracts = (data || []).map(contract=>({
+    ...contract,
+    _departamento: departmentOf(contract)
+  }));
 
   // Cargar evaluaciones junto con los contratos para que un hito ya evaluado
   // deje de aparecer como URGENTE automáticamente.
@@ -1165,6 +1183,11 @@ async function loadContracts(){
 function buildFilters(){
   const types = [...new Set(allContracts.map(x=>x.tipo_contrato).filter(Boolean))].sort();
   const bosses = [...new Set(allContracts.map(x=>x.jefe_nombre).filter(Boolean))].sort();
+  const departments = [...new Set(allContracts.map(x=>x._departamento).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,"es",{sensitivity:"base"}));
+
+  $("departmentFilter").innerHTML = '<option value="">Todos los departamentos</option>' +
+    departments.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
 
   $("typeFilter").innerHTML = '<option value="">Todos los tipos de contrato</option>' +
     types.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
@@ -1187,6 +1210,7 @@ function buildFilters(){
       navigateModule("contratos");
       drillMode = "";
       $("typeFilter").value = btn.dataset.type;
+      $("departmentFilter").value = "";
       $("statusFilter").value = "";
       $("searchInput").value = "";
       applyFilters();
@@ -1248,13 +1272,14 @@ function updateKpis(){
 
 function applyFilters(){
   const q = $("searchInput").value.trim().toLowerCase();
+  const department = $("departmentFilter").value;
   const type = $("typeFilter").value;
   const boss = $("bossFilter").value;
   const status = $("statusFilter").value;
 
   filteredContracts = allContracts.filter(x=>{
     const haystack = [
-      x.empleado_nombre,x.cargo,x.jefe_nombre,x.jefe_email,
+      x.empleado_nombre,x.cargo,x._departamento,x.jefe_nombre,x.jefe_email,
       x.tipo_contrato,x.proximo_hito
     ].join(" ").toLowerCase();
 
@@ -1266,10 +1291,19 @@ function applyFilters(){
 
     return drillOk
       && (!q || haystack.includes(q))
+      && (!department || x._departamento===department)
       && (!type || x.tipo_contrato===type)
       && (!boss || x.jefe_nombre===boss)
       && (!status || effectiveStatus===status);
   });
+
+  const uniqueEmployees = new Set(filteredContracts.map(x=>
+    x.empleado_id || String(x.empleado_nombre || "").trim().toLowerCase()
+  ).filter(Boolean)).size;
+  $("kpiEmployees").textContent = uniqueEmployees;
+  $("kpiEmployeesSub").textContent = department
+    ? `Empleados únicos en ${department}`
+    : (filteredContracts.length===allContracts.length ? "Empleados únicos" : "Empleados únicos según filtros");
 
   sortData();
   renderTable();
@@ -1286,7 +1320,10 @@ function sortData(){
 }
 
 function renderTable(){
-  $("resultCount").textContent = `${filteredContracts.length} registro${filteredContracts.length===1?"":"s"}`;
+  const uniqueEmployees = new Set(filteredContracts.map(x=>
+    x.empleado_id || String(x.empleado_nombre || "").trim().toLowerCase()
+  ).filter(Boolean)).size;
+  $("resultCount").textContent = `${filteredContracts.length} registro${filteredContracts.length===1?"":"s"} · ${uniqueEmployees} empleado${uniqueEmployees===1?"":"s"}`;
 
   if(!filteredContracts.length){
     $("contractsTable").classList.add("hidden");
@@ -1304,6 +1341,7 @@ function renderTable(){
     return `<tr data-index="${i}">
       <td class="employee" title="${esc(x.empleado_nombre)}">${esc(x.empleado_nombre)}</td>
       <td>${esc(x.cargo || "—")}</td>
+      <td>${esc(x._departamento || "—")}</td>
       <td>${esc(x.jefe_nombre || "—")}</td>
       <td>${esc(x.tipo_contrato || "—")}</td>
       <td class="money">${money(x.salario)}</td>
@@ -1326,6 +1364,7 @@ function openModal(x){
   $("modalTitle").textContent = x.empleado_nombre || "Detalle del contrato";
   const details = [
     ["Cargo",x.cargo],
+    ["Departamento",x._departamento],
     ["Jefe",x.jefe_nombre],
     ["Correo del jefe",x.jefe_email],
     ["Tipo de contrato",x.tipo_contrato],
@@ -1578,6 +1617,7 @@ function drillTo(mode){
   navigateModule("contratos");
   drillMode = mode==="all" ? "" : mode;
   $("searchInput").value = "";
+  $("departmentFilter").value = "";
   $("typeFilter").value = "";
   $("bossFilter").value = "";
   $("statusFilter").value = "";
@@ -2316,7 +2356,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   $("genWordBtn").addEventListener("click",generateContractWord);
   $("vacSearch").addEventListener("input",renderVacations);
 
-  ["searchInput","typeFilter","bossFilter","statusFilter"].forEach(id=>{
+  ["searchInput","departmentFilter","typeFilter","bossFilter","statusFilter"].forEach(id=>{
     const el = $(id);
     const eventName = id==="searchInput" ? "input" : "change";
     el.addEventListener(eventName,()=>{
