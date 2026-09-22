@@ -1002,13 +1002,19 @@
 
             <section class="commission-panel">
               <div class="cost-trend-head">
-                <div><h3>Tendencia mensual</h3><p>Evolución desde enero hasta el periodo seleccionado. Las comisiones están excluidas.</p></div>
+                <div><h3>Tendencia mensual</h3><p id="costTrendNote">Evolución desde enero hasta el periodo seleccionado.</p></div>
                 <div class="cost-trend-control">
                   <label>Indicador de la línea</label>
                   <select id="costTrendMetric">
                     <option value="headcount">Número de colaboradores</option>
-                    <option value="cost">Costo estructural sin comisiones</option>
-                    <option value="remuneration">Remuneración sin comisiones</option>
+                    <optgroup label="Con comisiones (cuadra con las tarjetas)">
+                      <option value="cost_total">Costo total con comisiones</option>
+                      <option value="remuneration_total">Remuneración con comisiones</option>
+                    </optgroup>
+                    <optgroup label="Sin comisiones (costo fijo)">
+                      <option value="cost">Costo estructural sin comisiones</option>
+                      <option value="remuneration">Remuneración sin comisiones</option>
+                    </optgroup>
                   </select>
                 </div>
               </div>
@@ -2425,6 +2431,17 @@ function renderCostTrend(){
   const sbu=Math.max(0,Number($('costSbu').value||0));
   const iessRate=Math.max(0,Number($('costIessRate').value||0));
   const metric=$('costTrendMetric').value;
+  const withCommissions=metric==='cost_total'||metric==='remuneration_total';
+  const useTotal=metric==='cost'||metric==='cost_total';
+  const calc=withCommissions?calculateEmployeeCost:calculateStructuralCost;
+  const notes={
+    headcount:'Colaboradores con rol de pago en cada mes.',
+    cost_total:'Incluye comisiones. El último mes debe cuadrar con la tarjeta "Costo total mensual".',
+    remuneration_total:'Incluye comisiones. El último mes debe cuadrar con la tarjeta "Remuneración".',
+    cost:'Excluye comisiones: muestra el costo fijo de la nómina.',
+    remuneration:'Excluye comisiones: muestra solo sueldo y horas extras.'
+  };
+  $('costTrendNote').textContent='Evolución desde enero hasta el periodo seleccionado. '+(notes[metric]||'');
   const labels=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const available=new Set(allRoles.map(r=>String(r.periodo_desde||'').slice(0,7)));
   const lastIndex=Math.max(0,Number(selectedMonth.slice(5,7))-1);
@@ -2434,8 +2451,8 @@ function renderCostTrend(){
     if(!available.has(month))continue;
     const rows=consolidateMonthlyCosts(month)
       .filter(x=>(!department||x.department===department)&&(!employee||x.employee===employee))
-      .map(x=>calculateStructuralCost(x,sbu,iessRate));
-    const value=metric==='headcount'?rows.length:rows.reduce((sum,row)=>sum+(metric==='cost'?row.total:row.remuneration),0);
+      .map(x=>calc(x,sbu,iessRate));
+    const value=metric==='headcount'?rows.length:rows.reduce((sum,row)=>sum+(useTotal?row.total:row.remuneration),0);
     points.push({month,label:labels[index],value});
   }
 
