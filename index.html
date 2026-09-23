@@ -351,7 +351,7 @@
     .btn-mini{border:1px solid #d7dee9;background:#fff;color:var(--navy);padding:7px 9px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer}
     .btn-mini:hover{background:#f7fafc}.btn-mini.green{background:#eef8df;color:#527d00;border-color:#d5e9a8}.btn-mini.blue{background:#edf4ff;color:#1d4ed8;border-color:#cfe0ff}.btn-mini.danger{background:#fff1f2;color:#b91c1c;border-color:#fecdd3}
     .commission-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:14px 0}
-    .commission-kpis .mini{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}.commission-kpis .mini .l{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase}.commission-kpis .mini .v{font-size:19px;font-weight:800;color:var(--navy);margin-top:6px}
+    .commission-kpis .mini{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}.commission-kpis .mini .l{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase}.commission-kpis .mini .v{font-size:19px;font-weight:800;color:var(--navy);margin-top:6px}.commission-kpis .mini .kpi-d{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.35}#costContent.view-fixed .col-com{display:none}#costContent.view-fixed #costBreakdownKpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}
     .commission-panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px}
     .commission-panel h3{margin:0 0 14px;color:var(--navy)}
     .cost-private{display:flex;align-items:center;gap:8px;background:#eef8df;color:#527d00;border:1px solid #d5e9a8;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:800}
@@ -979,25 +979,29 @@
 
           <div class="toolbar-card">
             <div class="toolbar-flex">
+              <div class="field-lite"><label>Vista de costo</label><select id="costView"><option value="fixed">Costo fijo (sin comisiones)</option><option value="total">Costo total (con comisiones)</option></select></div>
               <div class="field-lite"><label>Periodo</label><input id="costMonthFilter" type="month"></div>
               <div class="field-lite"><label>Departamento</label><select id="costDepartmentFilter"><option value="">Todos los departamentos</option></select></div>
               <div class="field-lite"><label>Colaborador</label><select id="costEmployeeFilter"><option value="">Todos los colaboradores</option></select></div>
               <div class="field-lite"><label>SBU para décimo cuarto (USD)</label><input id="costSbu" type="number" min="0" step="0.01" value="482"></div>
               <div class="field-lite"><label>IESS patronal estimado (%)</label><input id="costIessRate" type="number" min="0" step="0.01" value="11.15"></div>
             </div>
-            <div class="cost-assumptions">Cálculo: remuneración mensual + IESS patronal + décimo tercero + décimo cuarto + vacaciones + fondos de reserva registrados en Odoo. Los valores son una estimación gerencial y no reemplazan la liquidación oficial de nómina.</div>
+            <div class="cost-assumptions" id="costAssumptions">Cálculo: remuneración mensual + IESS patronal + décimo tercero + décimo cuarto + vacaciones + fondos de reserva registrados en Odoo. Los valores son una estimación gerencial y no reemplazan la liquidación oficial de nómina.</div>
           </div>
 
           <div id="costLoading" class="loading hidden">Calculando costo de personal...</div>
           <div id="costError" class="status-note err hidden"></div>
-          <div id="costContent" class="hidden">
-            <section class="commission-kpis">
-              <article class="mini"><div class="l">Costo total mensual</div><div class="v" id="costTotal">$0,00</div></article>
-              <article class="mini"><div class="l">Colaboradores</div><div class="v" id="costEmployees">0</div></article>
-              <article class="mini"><div class="l">Costo promedio</div><div class="v" id="costAverage">$0,00</div></article>
-              <article class="mini"><div class="l">Remuneración</div><div class="v" id="costRemuneration">$0,00</div></article>
-              <article class="mini"><div class="l">IESS patronal</div><div class="v" id="costIess">$0,00</div></article>
-              <article class="mini"><div class="l">Beneficios y provisiones</div><div class="v" id="costBenefits">$0,00</div></article>
+          <div id="costContent" class="hidden view-fixed">
+            <section class="commission-kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+              <article class="mini"><div class="l" id="costTotalLabel">Costo fijo mensual</div><div class="v" id="costTotal">$0,00</div><div class="kpi-d" id="costTotalDesc">Suma de las tarjetas de abajo</div></article>
+              <article class="mini"><div class="l">Colaboradores</div><div class="v" id="costEmployees">0</div><div class="kpi-d">Personas con rol de pago en el mes</div></article>
+              <article class="mini"><div class="l">Costo promedio</div><div class="v" id="costAverage">$0,00</div><div class="kpi-d">Costo del mes ÷ colaboradores</div></article>
+            </section>
+            <section class="commission-kpis" id="costBreakdownKpis" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-top:0">
+              <article class="mini"><div class="l">Sueldos y salarios</div><div class="v" id="costRemuneration">$0,00</div><div class="kpi-d">Sueldo ganado + horas extras (sin comisiones)</div></article>
+              <article class="mini col-com"><div class="l">+ Comisiones</div><div class="v" id="costCommissions">$0,00</div><div class="kpi-d">Comisiones pagadas en el rol del mes</div></article>
+              <article class="mini"><div class="l">+ IESS patronal</div><div class="v" id="costIess">$0,00</div><div class="kpi-d" id="costIessDesc">Aporte patronal sobre sueldos</div></article>
+              <article class="mini"><div class="l">+ Beneficios y provisiones</div><div class="v" id="costBenefits">$0,00</div><div class="kpi-d">Décimo 3.º, décimo 4.º, vacaciones y fondos de reserva</div></article>
             </section>
 
             <section class="commission-panel">
@@ -1006,15 +1010,9 @@
                 <div class="cost-trend-control">
                   <label>Indicador de la línea</label>
                   <select id="costTrendMetric">
+                    <option value="salaries">Sueldos y salarios fijos</option>
+                    <option value="cost" id="costTrendCostOption">Costo fijo del mes</option>
                     <option value="headcount">Número de colaboradores</option>
-                    <optgroup label="Con comisiones (cuadra con las tarjetas)">
-                      <option value="cost_total">Costo total con comisiones</option>
-                      <option value="remuneration_total">Remuneración con comisiones</option>
-                    </optgroup>
-                    <optgroup label="Sin comisiones (costo fijo)">
-                      <option value="cost">Costo estructural sin comisiones</option>
-                      <option value="remuneration">Remuneración sin comisiones</option>
-                    </optgroup>
                   </select>
                 </div>
               </div>
@@ -1031,7 +1029,7 @@
               <h3>Resumen por departamento</h3>
               <div class="commission-table-wrap">
                 <table class="commission-table">
-                  <thead><tr><th>Departamento</th><th class="center">Colaboradores</th><th class="right">Remuneración</th><th class="right">IESS patronal</th><th class="right">Provisiones</th><th class="right">Costo total</th></tr></thead>
+                  <thead><tr><th>Departamento</th><th class="center">Colaboradores</th><th class="right">Sueldos y salarios</th><th class="right col-com">Comisiones</th><th class="right">IESS patronal</th><th class="right">Provisiones</th><th class="right">Costo total</th></tr></thead>
                   <tbody id="costDepartmentBody"></tbody>
                 </table>
               </div>
@@ -1041,7 +1039,7 @@
               <h3>Detalle por colaborador</h3>
               <div class="commission-table-wrap">
                 <table class="commission-table">
-                  <thead><tr><th>Colaborador</th><th>Departamento</th><th class="right">Remuneración</th><th class="right">IESS patronal</th><th class="right">13.º</th><th class="right">14.º</th><th class="right">Vacaciones</th><th class="right">F. reserva</th><th class="right">Costo total</th></tr></thead>
+                  <thead><tr><th>Colaborador</th><th>Departamento</th><th class="right">Sueldos y salarios</th><th class="right col-com">Comisiones</th><th class="right">IESS patronal</th><th class="right">13.º</th><th class="right">14.º</th><th class="right">Vacaciones</th><th class="right">F. reserva</th><th class="right">Costo total</th></tr></thead>
                   <tbody id="costEmployeeBody"></tbody>
                 </table>
               </div>
@@ -2418,6 +2416,13 @@ function calculateStructuralCost(row,sbu,iessRate){
   return {...row,remuneration,iess,thirteenth,fourteenth,vacations,reserve,benefits,total:remuneration+iess+benefits};
 }
 
+function costForView(row,sbu,iessRate,view){
+  const fixed=calculateStructuralCost(row,sbu,iessRate);
+  if(view!=='total')return {...fixed,salaries:fixed.remuneration,commissions:0};
+  const full=calculateEmployeeCost(row,sbu,iessRate);
+  return {...full,salaries:fixed.remuneration,commissions:full.remuneration-fixed.remuneration};
+}
+
 function compactMoney(value){
   return '$'+new Intl.NumberFormat('es-EC',{notation:'compact',maximumFractionDigits:1}).format(Number(value||0));
 }
@@ -2431,15 +2436,11 @@ function renderCostTrend(){
   const sbu=Math.max(0,Number($('costSbu').value||0));
   const iessRate=Math.max(0,Number($('costIessRate').value||0));
   const metric=$('costTrendMetric').value;
-  const withCommissions=metric==='cost_total'||metric==='remuneration_total';
-  const useTotal=metric==='cost'||metric==='cost_total';
-  const calc=withCommissions?calculateEmployeeCost:calculateStructuralCost;
+  const view=$('costView').value;
   const notes={
-    headcount:'Colaboradores con rol de pago en cada mes.',
-    cost_total:'Incluye comisiones. El último mes debe cuadrar con la tarjeta "Costo total mensual".',
-    remuneration_total:'Incluye comisiones. El último mes debe cuadrar con la tarjeta "Remuneración".',
-    cost:'Excluye comisiones: muestra el costo fijo de la nómina.',
-    remuneration:'Excluye comisiones: muestra solo sueldo y horas extras.'
+    salaries:'Sueldo ganado + horas extras, sin comisiones: úsalo para ver cómo cambian los sueldos mes a mes.',
+    cost:view==='total'?'Costo total con comisiones (sueldos + comisiones + IESS + beneficios).':'Costo fijo sin comisiones (sueldos + IESS + beneficios).',
+    headcount:'Colaboradores con rol de pago en cada mes.'
   };
   $('costTrendNote').textContent='Evolución desde enero hasta el periodo seleccionado. '+(notes[metric]||'');
   const labels=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -2451,8 +2452,8 @@ function renderCostTrend(){
     if(!available.has(month))continue;
     const rows=consolidateMonthlyCosts(month)
       .filter(x=>(!department||x.department===department)&&(!employee||x.employee===employee))
-      .map(x=>calc(x,sbu,iessRate));
-    const value=metric==='headcount'?rows.length:rows.reduce((sum,row)=>sum+(useTotal?row.total:row.remuneration),0);
+      .map(x=>costForView(x,sbu,iessRate,view));
+    const value=metric==='headcount'?rows.length:rows.reduce((sum,row)=>sum+(metric==='cost'?row.total:row.salaries),0);
     points.push({month,label:labels[index],value});
   }
 
@@ -2522,27 +2523,37 @@ function renderCosts(){
   const employee=$('costEmployeeFilter').value;
   const sbu=Math.max(0,Number($('costSbu').value||0));
   const iessRate=Math.max(0,Number($('costIessRate').value||0));
-  const rows=consolidateMonthlyCosts(month).map(x=>calculateEmployeeCost(x,sbu,iessRate)).filter(x=>(!department||x.department===department)&&(!employee||x.employee===employee)).sort((a,b)=>b.total-a.total);
+  const view=$('costView').value;
+  const isTotal=view==='total';
+  $('costContent').classList.toggle('view-fixed',!isTotal);
+  $('costTotalLabel').textContent=isTotal?'Costo total mensual':'Costo fijo mensual';
+  $('costTotalDesc').textContent=isTotal?'Sueldos + comisiones + IESS + beneficios':'Sueldos + IESS + beneficios (sin comisiones)';
+  $('costIessDesc').textContent=isTotal?'Aporte patronal sobre sueldos + comisiones':'Aporte patronal sobre sueldos';
+  $('costAssumptions').textContent=(isTotal?'Costo total: sueldos + comisiones + IESS patronal + décimo tercero + décimo cuarto + vacaciones + fondos de reserva.':'Costo fijo: sueldos + IESS patronal + décimo tercero + décimo cuarto + vacaciones + fondos de reserva. No incluye comisiones.')+' Los valores son una estimación gerencial y no reemplazan la liquidación oficial de nómina.';
+  $('costTrendCostOption').textContent=isTotal?'Costo total del mes (con comisiones)':'Costo fijo del mes';
+  const rows=consolidateMonthlyCosts(month).map(x=>costForView(x,sbu,iessRate,view)).filter(x=>(!department||x.department===department)&&(!employee||x.employee===employee)).sort((a,b)=>b.total-a.total);
   const sum=field=>rows.reduce((total,row)=>total+Number(row[field]||0),0);
   const total=sum('total'),remuneration=sum('remuneration'),iess=sum('iess'),benefits=sum('benefits');
+  const salaries=sum('salaries'),commissions=sum('commissions');
   $('costTotal').textContent=money(total);
   $('costEmployees').textContent=rows.length;
   $('costAverage').textContent=money(rows.length?total/rows.length:0);
-  $('costRemuneration').textContent=money(remuneration);
+  $('costRemuneration').textContent=money(salaries);
+  $('costCommissions').textContent=money(commissions);
   $('costIess').textContent=money(iess);
   $('costBenefits').textContent=money(benefits);
 
   const departments=new Map();
   rows.forEach(row=>{
-    const item=departments.get(row.department)||{name:row.department,employees:0,remuneration:0,iess:0,benefits:0,total:0};
-    item.employees++;item.remuneration+=row.remuneration;item.iess+=row.iess;item.benefits+=row.benefits;item.total+=row.total;
+    const item=departments.get(row.department)||{name:row.department,employees:0,salaries:0,commissions:0,iess:0,benefits:0,total:0};
+    item.employees++;item.salaries+=row.salaries;item.commissions+=row.commissions;item.iess+=row.iess;item.benefits+=row.benefits;item.total+=row.total;
     departments.set(row.department,item);
   });
   const departmentRows=[...departments.values()].sort((a,b)=>b.total-a.total);
   const maxDepartment=Math.max(...departmentRows.map(x=>x.total),1);
   $('costDepartmentBars').innerHTML=departmentRows.length?departmentRows.map(x=>`<div class="cost-bar-row"><div class="cost-bar-name">${esc(x.name)} · ${x.employees}</div><div class="cost-bar-track"><div class="cost-bar-fill" style="width:${Math.max(2,x.total/maxDepartment*100).toFixed(2)}%"></div></div><div class="cost-bar-value">${money(x.total)}</div></div>`).join(''):'<div class="empty">No hay datos para los filtros seleccionados.</div>';
-  $('costDepartmentBody').innerHTML=departmentRows.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td class="center">${x.employees}</td><td class="right">${money(x.remuneration)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.benefits)}</td><td class="right"><b>${money(x.total)}</b></td></tr>`).join('');
-  $('costEmployeeBody').innerHTML=rows.map(x=>`<tr><td><b>${esc(x.employee)}</b></td><td>${esc(x.department)}</td><td class="right">${money(x.remuneration)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.thirteenth)}</td><td class="right">${money(x.fourteenth)}</td><td class="right">${money(x.vacations)}</td><td class="right">${money(x.reserve)}</td><td class="right"><b>${money(x.total)}</b></td></tr>`).join('');
+  $('costDepartmentBody').innerHTML=departmentRows.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td class="center">${x.employees}</td><td class="right">${money(x.salaries)}</td><td class="right col-com">${money(x.commissions)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.benefits)}</td><td class="right"><b>${money(x.total)}</b></td></tr>`).join('');
+  $('costEmployeeBody').innerHTML=rows.map(x=>`<tr><td><b>${esc(x.employee)}</b></td><td>${esc(x.department)}</td><td class="right">${money(x.salaries)}</td><td class="right col-com">${money(x.commissions)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.thirteenth)}</td><td class="right">${money(x.fourteenth)}</td><td class="right">${money(x.vacations)}</td><td class="right">${money(x.reserve)}</td><td class="right"><b>${money(x.total)}</b></td></tr>`).join('');
   renderCostTrend();
   $('costContent').classList.remove('hidden');
 }
@@ -2611,6 +2622,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   $("costDepartmentFilter").addEventListener("change",()=>{buildCostEmployeeFilter();renderCosts()});
   $("costEmployeeFilter").addEventListener("change",renderCosts);
   $("costSbu").addEventListener("input",renderCosts);
+  $("costView").addEventListener("change",renderCosts);
   $("costIessRate").addEventListener("input",renderCosts);
   $("costTrendMetric").addEventListener("change",renderCostTrend);
 
