@@ -351,7 +351,7 @@
     .btn-mini{border:1px solid #d7dee9;background:#fff;color:var(--navy);padding:7px 9px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer}
     .btn-mini:hover{background:#f7fafc}.btn-mini.green{background:#eef8df;color:#527d00;border-color:#d5e9a8}.btn-mini.blue{background:#edf4ff;color:#1d4ed8;border-color:#cfe0ff}.btn-mini.danger{background:#fff1f2;color:#b91c1c;border-color:#fecdd3}
     .commission-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:14px 0}
-    .commission-kpis .mini{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}.commission-kpis .mini .l{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase}.commission-kpis .mini .v{font-size:19px;font-weight:800;color:var(--navy);margin-top:6px}.commission-kpis .mini .kpi-d{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.35}#costContent.view-fixed .col-com{display:none}#costContent.view-fixed #costBreakdownKpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+    .commission-kpis .mini{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}.commission-kpis .mini .l{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase}.commission-kpis .mini .v{font-size:19px;font-weight:800;color:var(--navy);margin-top:6px}.commission-kpis .mini .kpi-d{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.35}.cost-click-hint{font-size:12px;color:var(--muted);margin:-4px 0 10px}#costDepartmentBody tr{cursor:pointer;transition:background .15s}#costDepartmentBody tr:hover{background:#f3f8e6}#costDepartmentBody tr.dept-selected{background:#e6f2c7;box-shadow:inset 4px 0 0 #7db900}.cost-detail-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.cost-dept-chip{display:inline-flex;align-items:center;gap:8px;background:#e6f2c7;color:#12325b;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700}.cost-dept-chip button{border:0;background:#12325b;color:#fff;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer}#costContent.view-fixed .col-com{display:none}#costContent.view-fixed #costBreakdownKpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}
     .commission-panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px}
     .commission-panel h3{margin:0 0 14px;color:var(--navy)}
     .cost-private{display:flex;align-items:center;gap:8px;background:#eef8df;color:#527d00;border:1px solid #d5e9a8;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:800}
@@ -1027,6 +1027,7 @@
 
             <section class="commission-panel">
               <h3>Resumen por departamento</h3>
+              <p class="cost-click-hint">Haz clic en un departamento para ver su detalle de colaboradores abajo. Clic de nuevo para quitar la selección.</p>
               <div class="commission-table-wrap">
                 <table class="commission-table">
                   <thead><tr><th>Departamento</th><th class="center">Colaboradores</th><th class="right">Sueldos y salarios</th><th class="right col-com">Comisiones</th><th class="right">IESS patronal</th><th class="right">Provisiones</th><th class="right">Costo total</th></tr></thead>
@@ -1036,7 +1037,7 @@
             </section>
 
             <section class="commission-panel">
-              <h3>Detalle por colaborador</h3>
+              <div class="cost-detail-head"><h3>Detalle por colaborador</h3><div id="costDetailFilter"></div></div>
               <div class="commission-table-wrap">
                 <table class="commission-table">
                   <thead><tr><th>Colaborador</th><th>Departamento</th><th class="right">Sueldos y salarios</th><th class="right col-com">Comisiones</th><th class="right">IESS patronal</th><th class="right">13.º</th><th class="right">14.º</th><th class="right">Vacaciones</th><th class="right">F. reserva</th><th class="right">Costo total</th></tr></thead>
@@ -2517,6 +2518,13 @@ async function loadCosts(){
   renderCosts();
 }
 
+let costSelectedDept='';
+function selectCostDept(name){
+  costSelectedDept=costSelectedDept===name?'':name;
+  renderCosts();
+  if(costSelectedDept){const t=$('costEmployeeBody');if(t)t.closest('section').scrollIntoView({behavior:'smooth',block:'start'});}
+}
+
 function renderCosts(){
   const month=$('costMonthFilter').value;
   const department=$('costDepartmentFilter').value;
@@ -2552,8 +2560,13 @@ function renderCosts(){
   const departmentRows=[...departments.values()].sort((a,b)=>b.total-a.total);
   const maxDepartment=Math.max(...departmentRows.map(x=>x.total),1);
   $('costDepartmentBars').innerHTML=departmentRows.length?departmentRows.map(x=>`<div class="cost-bar-row"><div class="cost-bar-name">${esc(x.name)} · ${x.employees}</div><div class="cost-bar-track"><div class="cost-bar-fill" style="width:${Math.max(2,x.total/maxDepartment*100).toFixed(2)}%"></div></div><div class="cost-bar-value">${money(x.total)}</div></div>`).join(''):'<div class="empty">No hay datos para los filtros seleccionados.</div>';
-  $('costDepartmentBody').innerHTML=departmentRows.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td class="center">${x.employees}</td><td class="right">${money(x.salaries)}</td><td class="right col-com">${money(x.commissions)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.benefits)}</td><td class="right"><b>${money(x.total)}</b></td></tr>`).join('');
-  $('costEmployeeBody').innerHTML=rows.map(x=>`<tr><td><b>${esc(x.employee)}</b></td><td>${esc(x.department)}</td><td class="right">${money(x.salaries)}</td><td class="right col-com">${money(x.commissions)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.thirteenth)}</td><td class="right">${money(x.fourteenth)}</td><td class="right">${money(x.vacations)}</td><td class="right">${money(x.reserve)}</td><td class="right"><b>${money(x.total)}</b></td></tr>`).join('');
+  if(costSelectedDept && !departmentRows.some(x=>x.name===costSelectedDept))costSelectedDept='';
+  $('costDepartmentBody').innerHTML=departmentRows.map(x=>`<tr data-dept="${esc(x.name)}" class="${x.name===costSelectedDept?'dept-selected':''}"><td><b>${esc(x.name)}</b></td><td class="center">${x.employees}</td><td class="right">${money(x.salaries)}</td><td class="right col-com">${money(x.commissions)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.benefits)}</td><td class="right"><b>${money(x.total)}</b></td></tr>`).join('');
+  $('costDepartmentBody').querySelectorAll('tr').forEach(tr=>tr.addEventListener('click',()=>selectCostDept(tr.dataset.dept)));
+  const detailRows=costSelectedDept?rows.filter(x=>x.department===costSelectedDept):rows;
+  $('costDetailFilter').innerHTML=costSelectedDept?`<span class="cost-dept-chip">Mostrando: ${esc(costSelectedDept)} · ${detailRows.length} colaboradores <button type="button" id="costClearDept">Ver todos</button></span>`:'';
+  if(costSelectedDept)$('costClearDept').addEventListener('click',()=>selectCostDept(costSelectedDept));
+  $('costEmployeeBody').innerHTML=detailRows.map(x=>`<tr><td><b>${esc(x.employee)}</b></td><td>${esc(x.department)}</td><td class="right">${money(x.salaries)}</td><td class="right col-com">${money(x.commissions)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.thirteenth)}</td><td class="right">${money(x.fourteenth)}</td><td class="right">${money(x.vacations)}</td><td class="right">${money(x.reserve)}</td><td class="right"><b>${money(x.total)}</b></td></tr>`).join('');
   renderCostTrend();
   $('costContent').classList.remove('hidden');
 }
