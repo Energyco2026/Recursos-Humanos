@@ -409,6 +409,35 @@
     .inac-table th[data-isort].sorted:after{content:" ▾"}
     .inac-table th[data-isort].sorted.asc:after{content:" ▴"}
     .inac-wrap{max-height:460px}
+    #module-resumen .kpis{grid-template-columns:repeat(7,minmax(130px,1fr))}
+    .kpi.gray:before{background:#94a3b8}
+    .inac-collapse{margin:-4px 0 18px;animation:inacDown .2s ease}
+    @keyframes inacDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+    @media(max-width:1200px){#module-resumen .kpis{grid-template-columns:repeat(4,minmax(130px,1fr))}}
+    @media(max-width:700px){#module-resumen .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    /* Lista desplegable de personal por facturación */
+    .ext-list{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+    .ext-group{display:flex;justify-content:space-between;gap:10px;padding:10px 16px;background:#f3f8e6;color:var(--navy);font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+    .ext-item{border-top:1px solid var(--line)}
+    .ext-item-head{width:100%;display:flex;align-items:center;gap:12px;padding:13px 16px;background:#fff;border:0;cursor:pointer;text-align:left;font:inherit;color:inherit}
+    .ext-item-head:hover{background:#f7faf0}
+    .ext-caret{transition:transform .2s;color:var(--muted);width:14px;flex:none}
+    .ext-item.open .ext-caret{transform:rotate(90deg)}
+    .ext-item.open .ext-item-head{background:#eef6dc}
+    .ext-name{font-weight:800;color:var(--navy);flex:1}
+    .ext-cargo{color:var(--muted);font-size:12px;min-width:170px}
+    .ext-amount{font-weight:800;color:var(--navy);min-width:130px;text-align:right;white-space:nowrap}
+    .ext-body{display:none;padding:6px 16px 18px 42px;background:#fbfcfd;border-top:1px dashed var(--line)}
+    .ext-item.open .ext-body{display:block}
+    .ext-body h4{margin:16px 0 8px;color:var(--navy);font-size:13px}
+    .ext-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:12px 0}
+    .ext-stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px}
+    .ext-stat .l{font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase}
+    .ext-stat .v{font-size:15px;font-weight:800;color:var(--navy);margin-top:4px;white-space:nowrap}
+    .ext-stat.red .v{color:#b91c1c}.ext-stat.amber .v{color:#9a5b00}.ext-stat.zero .v{color:#94a3b8}
+    .ext-total{display:flex;justify-content:space-between;padding:13px 16px;background:#1F3864;color:#fff;font-weight:800}
+    .ext-body .commission-table{min-width:700px}
+    @media(max-width:900px){.ext-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.ext-cargo{display:none}.ext-body{padding-left:16px}}
     /* ── Personal por facturación ── */
     .ext-red{color:#b91c1c;font-weight:800}
     .ext-amber{color:#9a5b00;font-weight:700}
@@ -532,21 +561,19 @@
             <article class="kpi yellow clickable" data-drill="upcoming"><div class="label">Próximos hitos</div><div class="value" id="sumMilestones">0</div><div class="sub">Gestión próxima</div></article>
             <article class="kpi red clickable" data-drill="urgent"><div class="label">Urgentes</div><div class="value" id="sumUrgent">0</div><div class="sub">15 días o menos</div></article>
             <article class="kpi blue clickable" data-drill="evaluations"><div class="label">Evaluaciones pendientes</div><div class="value" id="sumEvaluations">—</div><div class="sub">Módulo en integración</div></article>
+            <article class="kpi gray clickable" id="kpiInactivos"><div class="label">Empleados inactivos</div><div class="value" id="sumInactivos">—</div><div class="sub" id="sumInactivosSub">Clic para ver detalle ▾</div></article>
           </section>
 
-          <div class="summary-card" style="margin-top:18px">
-            <h3>Tipos de contrato</h3>
-            <p class="muted" style="margin-top:-5px">Haz clic en un tipo para ver únicamente esos contratos.</p>
-            <div id="typeDistribution" class="type-grid"></div>
-          </div>
-
-          <div class="summary-card" style="margin-top:18px" id="inactivosCard">
+          <div class="summary-card inac-collapse hidden" id="inactivosCard">
             <div class="inac-head">
               <div>
                 <h3>Empleados inactivos <span class="inac-count" id="inacCount">0</span></h3>
                 <p class="muted" style="margin-top:-5px">Colaboradores sin contrato vigente: fecha de ingreso, fecha de salida y último sueldo.</p>
               </div>
-              <button class="export-btn" id="inacExportBtn">↓ Exportar CSV</button>
+              <div style="display:flex;gap:8px">
+                <button class="export-btn" id="inacExportBtn">↓ Exportar CSV</button>
+                <button class="btn-mini" id="inacCloseBtn">Ocultar ▴</button>
+              </div>
             </div>
             <div class="filters inac-filters">
               <input class="search" id="inacSearch" placeholder="Buscar colaborador, cargo o departamento...">
@@ -570,6 +597,12 @@
               </table>
             </div>
             <div id="inacEmpty" class="empty hidden">No hay empleados inactivos que coincidan con los filtros.</div>
+          </div>
+
+          <div class="summary-card" style="margin-top:18px">
+            <h3>Tipos de contrato</h3>
+            <p class="muted" style="margin-top:-5px">Haz clic en un tipo para ver únicamente esos contratos.</p>
+            <div id="typeDistribution" class="type-grid"></div>
           </div>
 
           <div class="welcome-grid">
@@ -1140,39 +1173,11 @@
 
             <section class="commission-panel">
               <div class="cost-detail-head">
-                <h3>Resumen por persona</h3>
+                <h3>Personas</h3>
                 <div class="field-lite" style="min-width:220px"><select id="extGroupFilter"><option value="">Todos los grupos</option></select></div>
               </div>
-              <p class="cost-click-hint">Haz clic en una persona para ver su detalle mensual abajo.</p>
-              <div class="commission-table-wrap">
-                <table class="commission-table" style="min-width:1550px">
-                  <thead><tr>
-                    <th>Persona</th><th>Cargo</th>
-                    <th class="right">Costo total</th><th class="right">Sin sustento</th><th class="right">Costo fiscal</th><th class="right">Pend. factura</th>
-                    <th class="right">Costo facturado</th><th class="right">Prom. mensual</th>
-                    <th class="right">Honorarios</th><th class="right">Comisiones</th><th class="right">Décimo 4.º</th><th class="right">Hon. 2025</th>
-                  </tr></thead>
-                  <tbody id="extBody"></tbody>
-                </table>
-              </div>
-            </section>
-
-            <section class="commission-panel hidden" id="extDetailPanel">
-              <div class="cost-detail-head"><h3 id="extDetailTitle">Detalle</h3><button class="btn-mini" id="extDetailClose">Cerrar</button></div>
-              <p class="cost-click-hint" id="extDetailSub"></p>
-              <div class="commission-table-wrap">
-                <table class="commission-table" style="min-width:900px">
-                  <thead id="extDetailHead"></thead>
-                  <tbody id="extDetailBody"></tbody>
-                </table>
-              </div>
-              <h3 style="margin-top:18px">Anticipos sin factura</h3>
-              <div class="commission-table-wrap">
-                <table class="commission-table" style="min-width:760px">
-                  <thead><tr><th>Fecha</th><th>Pago</th><th>Memo</th><th>Estado</th><th class="right">Importe</th></tr></thead>
-                  <tbody id="extAnticiposBody"></tbody>
-                </table>
-              </div>
+              <p class="cost-click-hint">Haz clic en un nombre para desplegar su detalle.</p>
+              <div id="extList" class="ext-list"></div>
             </section>
 
             <div class="cost-assumptions">Fuente: facturas de proveedor y pagos publicados en Odoo, sincronizados con sync_personal_externo.py. "Sin sustento" = anticipos de meses anteriores que no están cruzados con una factura. El costo fiscal es una estimación gerencial, no una liquidación tributaria.</div>
@@ -1257,7 +1262,7 @@ let externoLoaded = false;
 let extResumen = [];
 let extMensual = [];
 let extAnticipos = [];
-let extSelected = null;
+let extOpen = new Set();
 
 const $ = id => document.getElementById(id);
 
@@ -1839,6 +1844,7 @@ async function loadInactivos(){
   }
   allInactivos = (data||[]).map(x=>({...x, ultimo_sueldo:Number(x.ultimo_sueldo||0), dias_trabajados:x.dias_trabajados===null?null:Number(x.dias_trabajados)}));
   $("inacCount").textContent = allInactivos.length;
+  $("sumInactivos").textContent = allInactivos.length;
 
   const years = [...new Set(allInactivos.map(x=>(x.fecha_salida||"").slice(0,4)).filter(Boolean))].sort().reverse();
   $("inacYear").innerHTML = '<option value="">Todos los años de salida</option>' + years.map(y=>`<option value="${y}">${y}</option>`).join("");
@@ -1946,26 +1952,59 @@ async function loadExterno(){
   renderExterno();
 }
 
-function extCells(r){
-  const sin = extNum(r.anticipos_sin_sustento), fis = extNum(r.costo_fiscal_estimado), pen = extNum(r.anticipos_pendientes_mes);
-  return `
-    <td class="right"><strong>${money(r.costo_total)}</strong></td>
-    <td class="right ${sin?"ext-red":"ext-muted-col"}">${money(sin)}</td>
-    <td class="right ${fis?"ext-red":"ext-muted-col"}">${money(fis)}</td>
-    <td class="right ${pen?"ext-amber":"ext-muted-col"}">${money(pen)}</td>
-    <td class="right">${money(r.costo_facturado)}</td>
-    <td class="right">${r.promedio_mensual===null||r.promedio_mensual===undefined?"—":money(r.promedio_mensual)}</td>
-    <td class="right">${money(r.honorarios)}</td>
-    <td class="right">${money(r.comisiones)}</td>
-    <td class="right">${money(r.decimo_cuarto)}</td>
-    <td class="right">${money(r.honorarios_2025)}</td>`;
-}
-
 function sumExt(rows){
   const keys = ["honorarios","comisiones","decimo_cuarto","honorarios_2025","costo_facturado","anticipos_pendientes_mes","anticipos_sin_sustento","costo_fiscal_estimado","costo_total"];
-  const o = {promedio_mensual:null};
+  const o = {};
   keys.forEach(k=>o[k]=rows.reduce((s,r)=>s+extNum(r[k]),0));
   return o;
+}
+
+function extStat(label,value,cls=""){
+  const v = extNum(value);
+  return `<div class="ext-stat ${v?cls:"zero"}"><div class="l">${label}</div><div class="v">${money(v)}</div></div>`;
+}
+
+function extPersonBody(r){
+  const pid = r.partner_id;
+  const filas = extMensual.filter(m=>m.partner_id===pid);
+  const periodos = [...new Set(filas.map(f=>f.periodo))].sort();
+  const conceptos = EXT_CONCEPTOS.filter(c=>filas.some(f=>f.concepto===c));
+  const hayArriendo = filas.some(f=>f.concepto==="Arriendo");
+  const val = (p,c)=>filas.filter(f=>f.periodo===p && f.concepto===c).reduce((s,f)=>s+extNum(f.monto),0);
+
+  let html = `<p class="cost-click-hint" style="margin:10px 0 0">RUC/CI ${esc(r.ruc_ci||"—")} · ${extNum(r.n_facturas)} facturas · Último pago ${dateEC(r.ultimo_pago)} · Promedio mensual facturado ${r.promedio_mensual==null?"—":money(r.promedio_mensual)}</p>
+  <div class="ext-stats">
+    ${extStat("Honorarios",r.honorarios)}${extStat("Comisiones",r.comisiones)}${extStat("Décimo 4.º",r.decimo_cuarto)}${extStat("Honorarios 2025",r.honorarios_2025)}${extStat("Costo facturado",r.costo_facturado)}
+    ${extStat("Pendiente de factura",r.anticipos_pendientes_mes,"amber")}${extStat("Sin sustento",r.anticipos_sin_sustento,"red")}${extStat("Costo fiscal (35%)",r.costo_fiscal_estimado,"red")}${extStat("Arriendo (no suma)",r.arriendo_excluido)}${extStat("Costo total",r.costo_total)}
+  </div>`;
+
+  if(periodos.length){
+    const totCol = {}; let totalGeneral = 0;
+    let body = periodos.map(p=>{
+      let t = 0;
+      const tds = conceptos.map(c=>{const v=val(p,c);t+=v;totCol[c]=(totCol[c]||0)+v;return `<td class="right ${c==="Anticipo sin sustento"&&v?"ext-red":""}">${v?money(v):"—"}</td>`;}).join("");
+      totalGeneral += t;
+      const arr = hayArriendo ? `<td class="right ext-muted-col">${val(p,"Arriendo")?money(val(p,"Arriendo")):"—"}</td>` : "";
+      return `<tr><td>${periodoLabel(p)}</td>${tds}<td class="right"><strong>${money(t)}</strong></td>${arr}</tr>`;
+    }).join("");
+    const arrTot = hayArriendo ? `<td class="right">${money(filas.filter(f=>f.concepto==="Arriendo").reduce((s,f)=>s+extNum(f.monto),0))}</td>` : "";
+    body += `<tr class="ext-total-row"><td>TOTAL</td>${conceptos.map(c=>`<td class="right">${money(totCol[c]||0)}</td>`).join("")}<td class="right">${money(totalGeneral)}</td>${arrTot}</tr>`;
+    html += `<h4>Detalle mensual</h4><div class="commission-table-wrap"><table class="commission-table">
+      <thead><tr><th>Mes</th>${conceptos.map(c=>`<th class="right">${esc(c)}</th>`).join("")}<th class="right">Total mes</th>${hayArriendo?'<th class="right">Arriendo (no suma)</th>':""}</tr></thead>
+      <tbody>${body}</tbody></table></div>`;
+  }
+
+  const mesActual = new Date().toISOString().slice(0,7);
+  const ants = extAnticipos.filter(a=>a.partner_id===pid);
+  if(ants.length){
+    html += `<h4>Anticipos sin factura</h4><div class="commission-table-wrap"><table class="commission-table">
+      <thead><tr><th>Fecha</th><th>Pago</th><th>Memo</th><th>Estado</th><th class="right">Importe</th></tr></thead><tbody>
+      ${ants.map(a=>{const sin=a.periodo<mesActual;return `<tr><td>${dateEC(a.fecha)}</td><td>${esc(a.pago)}</td><td>${esc(a.memo)}</td>
+        <td>${sin?'<span class="ext-flag">Sin sustento</span>':'<span class="ext-flag amber">Pendiente del mes</span>'}</td>
+        <td class="right ${sin?"ext-red":""}">${money(a.importe)}</td></tr>`;}).join("")}
+      </tbody></table></div>`;
+  }
+  return html;
 }
 
 function renderExterno(){
@@ -1985,66 +2024,27 @@ function renderExterno(){
   let html = "";
   orden.forEach(grupo=>{
     const gr = rows.filter(r=>(r.grupo||"Sin grupo")===grupo).sort((a,b)=>extNum(b.costo_total)-extNum(a.costo_total));
-    html += `<tr class="ext-group-row"><td colspan="12">${esc(grupo)} · ${gr.length}</td></tr>`;
+    html += `<div class="ext-group"><span>${esc(grupo)} · ${gr.length}</span><span>${money(sumExt(gr).costo_total)}</span></div>`;
     gr.forEach(r=>{
       const flags = (extNum(r.anticipos_sin_sustento)?'<span class="ext-flag">Sin sustento</span>':'') + (!extNum(r.n_facturas)?'<span class="ext-flag amber">Sin facturas</span>':'');
-      html += `<tr class="ext-row ${extSelected===r.partner_id?"sel":""}" data-pid="${r.partner_id}">
-        <td><strong>${esc(r.nombre)}</strong>${flags}</td><td>${esc(r.cargo||"—")}</td>${extCells(r)}</tr>`;
+      const open = extOpen.has(r.partner_id);
+      html += `<div class="ext-item ${open?"open":""}" data-pid="${r.partner_id}">
+        <button class="ext-item-head" type="button"><span class="ext-caret">▶</span><span class="ext-name">${esc(r.nombre)}${flags}</span><span class="ext-cargo">${esc(r.cargo||"")}</span><span class="ext-amount">${money(r.costo_total)}</span></button>
+        <div class="ext-body">${open?extPersonBody(r):""}</div>
+      </div>`;
     });
-    if(!g) html += `<tr class="ext-sub-row"><td colspan="2">Subtotal ${esc(grupo)}</td>${extCells(sumExt(gr))}</tr>`;
   });
-  html += `<tr class="ext-total-row"><td colspan="2">TOTAL</td>${extCells(tot)}</tr>`;
-  $("extBody").innerHTML = html;
-  $("extBody").querySelectorAll(".ext-row").forEach(tr=>{
-    tr.addEventListener("click",()=>showExternoDetail(Number(tr.dataset.pid)));
+  html += `<div class="ext-total"><span>TOTAL · ${rows.length} personas</span><span>${money(tot.costo_total)}</span></div>`;
+  $("extList").innerHTML = html;
+
+  $("extList").querySelectorAll(".ext-item").forEach(item=>{
+    item.querySelector(".ext-item-head").addEventListener("click",()=>{
+      const pid = Number(item.dataset.pid);
+      const r = extResumen.find(x=>x.partner_id===pid);
+      if(extOpen.has(pid)){ extOpen.delete(pid); item.classList.remove("open"); }
+      else { extOpen.add(pid); item.querySelector(".ext-body").innerHTML = extPersonBody(r); item.classList.add("open"); }
+    });
   });
-}
-
-function showExternoDetail(pid){
-  if(extSelected===pid){ closeExternoDetail(); return; }
-  extSelected = pid;
-  const persona = extResumen.find(r=>r.partner_id===pid);
-  if(!persona) return;
-  const filas = extMensual.filter(m=>m.partner_id===pid);
-  const periodos = [...new Set(filas.map(f=>f.periodo))].sort();
-  const conceptos = EXT_CONCEPTOS.filter(c=>filas.some(f=>f.concepto===c));
-  const hayArriendo = filas.some(f=>f.concepto==="Arriendo");
-  const val = (p,c)=>filas.filter(f=>f.periodo===p && f.concepto===c).reduce((s,f)=>s+extNum(f.monto),0);
-
-  $("extDetailTitle").textContent = persona.nombre;
-  $("extDetailSub").textContent = `${persona.cargo||""} · ${persona.grupo||""} · RUC/CI ${persona.ruc_ci||"—"} · Último pago ${dateEC(persona.ultimo_pago)}`;
-  $("extDetailHead").innerHTML = `<tr><th>Mes</th>${conceptos.map(c=>`<th class="right">${esc(c)}</th>`).join("")}<th class="right">Total mes</th>${hayArriendo?'<th class="right ext-muted-col">Arriendo (no suma)</th>':""}</tr>`;
-  let totalGeneral = 0;
-  const totCol = {};
-  let body = periodos.map(p=>{
-    let t = 0;
-    const tds = conceptos.map(c=>{const v=val(p,c);t+=v;totCol[c]=(totCol[c]||0)+v;return `<td class="right ${c==="Anticipo sin sustento"&&v?"ext-red":""}">${v?money(v):"—"}</td>`;}).join("");
-    totalGeneral += t;
-    const arr = hayArriendo ? `<td class="right ext-muted-col">${val(p,"Arriendo")?money(val(p,"Arriendo")):"—"}</td>` : "";
-    return `<tr><td>${periodoLabel(p)}</td>${tds}<td class="right"><strong>${money(t)}</strong></td>${arr}</tr>`;
-  }).join("");
-  const arrTot = hayArriendo ? `<td class="right">${money(filas.filter(f=>f.concepto==="Arriendo").reduce((s,f)=>s+extNum(f.monto),0))}</td>` : "";
-  body += `<tr class="ext-total-row"><td>TOTAL</td>${conceptos.map(c=>`<td class="right">${money(totCol[c]||0)}</td>`).join("")}<td class="right">${money(totalGeneral)}</td>${arrTot}</tr>`;
-  $("extDetailBody").innerHTML = body || `<tr><td colspan="9" class="center muted">Sin movimientos</td></tr>`;
-
-  const mesActual = new Date().toISOString().slice(0,7);
-  const ants = extAnticipos.filter(a=>a.partner_id===pid);
-  $("extAnticiposBody").innerHTML = ants.length ? ants.map(a=>{
-    const sin = a.periodo < mesActual;
-    return `<tr><td>${dateEC(a.fecha)}</td><td>${esc(a.pago)}</td><td>${esc(a.memo)}</td>
-      <td>${sin?'<span class="ext-flag">Sin sustento</span>':'<span class="ext-flag amber">Pendiente del mes</span>'}</td>
-      <td class="right ${sin?"ext-red":""}">${money(a.importe)}</td></tr>`;
-  }).join("") : `<tr><td colspan="5" class="center muted">Todos los anticipos están cruzados con factura.</td></tr>`;
-
-  $("extDetailPanel").classList.remove("hidden");
-  renderExterno();
-  $("extDetailPanel").scrollIntoView({behavior:"smooth",block:"start"});
-}
-
-function closeExternoDetail(){
-  extSelected = null;
-  $("extDetailPanel").classList.add("hidden");
-  renderExterno();
 }
 
 function navigateModule(name){
@@ -3051,8 +3051,18 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 
   // Personal por facturación
   $("extGroupFilter").addEventListener("change",renderExterno);
-  $("extRefreshBtn").addEventListener("click",()=>{externoLoaded=false;extSelected=null;$("extDetailPanel").classList.add("hidden");loadExterno();});
-  $("extDetailClose").addEventListener("click",closeExternoDetail);
+  $("extRefreshBtn").addEventListener("click",()=>{externoLoaded=false;extOpen.clear();loadExterno();});
+
+  // Tarjeta de inactivos: abre/cierra el detalle desplegable
+  const toggleInactivos = (show)=>{
+    const card = $("inactivosCard");
+    const abrir = show ?? card.classList.contains("hidden");
+    card.classList.toggle("hidden", !abrir);
+    $("kpiInactivos").classList.toggle("active", abrir);
+    $("sumInactivosSub").textContent = abrir ? "Clic para ocultar ▴" : "Clic para ver detalle ▾";
+  };
+  $("kpiInactivos").addEventListener("click",()=>toggleInactivos());
+  $("inacCloseBtn").addEventListener("click",()=>toggleInactivos(false));
 
   document.querySelectorAll(".kpi.clickable[data-drill]").forEach(card=>{
     card.addEventListener("click",()=>drillTo(card.dataset.drill));
