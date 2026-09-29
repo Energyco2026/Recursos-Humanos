@@ -1021,6 +1021,7 @@
               <div class="form-group"><label>Cédula</label><input id="certId"></div>
               <div class="form-group"><label>Cargo</label><input id="certJob"></div>
               <div class="form-group"><label>Fecha de ingreso</label><input id="certStart" type="date"></div>
+              <div class="form-group"><label>Fecha de salida (solo inactivos)</label><input id="certEnd" type="date"></div>
               <div class="form-group"><label>Sueldo mensual USD</label><input id="certSalary" type="number" step="0.01"></div>
               <div class="form-group"><label>Ciudad</label><input id="certCity" value="Guayaquil"></div>
               <div class="form-group">
@@ -1462,8 +1463,7 @@ function buildFilters(){
     });
   $("genEmployee").innerHTML = '<option value="">Selecciona un colaborador...</option>' +
     uniqueEmployees.map(x=>`<option value="${x.empleado_id}">${esc(x.empleado_nombre)}</option>`).join("");
-  $("certEmployee").innerHTML = '<option value="">Selecciona un colaborador...</option>' +
-    uniqueEmployees.map(x=>`<option value="${x.empleado_id}">${esc(x.empleado_nombre)}</option>`).join("");
+  buildCertEmployeeOptions();
   $("rolEmployeeFilter").innerHTML = '<option value="">Todos los colaboradores</option>' +
     uniqueEmployees.map(x=>`<option value="${esc(x.empleado_nombre)}">${esc(x.empleado_nombre)}</option>`).join("");
 }
@@ -1851,6 +1851,7 @@ async function loadInactivos(){
   const types = [...new Set(allInactivos.map(x=>x.tipo_contrato).filter(Boolean))].sort();
   $("inacType").innerHTML = '<option value="">Todos los tipos de contrato</option>' + types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
   renderInactivos();
+  buildCertEmployeeOptions();
 }
 
 function filteredInactivos(){
@@ -2612,6 +2613,10 @@ function printCommission(){
    CERTIFICADOS LABORALES
 ============================================================ */
 function certificateText(d){
+  if(d.inactivo){
+    const base = `Por medio del presente, certifico que ${d.treatment} ${d.nombre}, con cédula de ciudadanía No. ${d.id}, prestó sus servicios en la compañía ENERGYCONTROL S.A., con RUC No. 0992284714001, desde el ${d.startLong} hasta el ${d.endLong}, desempeñando el cargo de ${d.cargo}.`;
+    return base+(d.tipo==="con_sueldo" ? ` Su última remuneración mensual fue de USD ${d.salario}.` : "");
+  }
   const base = `Por medio del presente, certifico que ${d.treatment} ${d.nombre}, con cédula de ciudadanía No. ${d.id}, presta sus servicios en la compañía ENERGYCONTROL S.A., con RUC No. 0992284714001, desde el ${d.startLong}, desempeñando el cargo de ${d.cargo}.`;
   return base+(d.tipo==="con_sueldo" ? ` Percibe una remuneración mensual de USD ${d.salario}.` : "");
 }
@@ -2631,9 +2636,37 @@ function certificateMarkup(d){
     <p style="font-size:9pt;color:#555;text-align:center;margin:45pt 0 0">INGENIERÍA · SERVICIO · REPUESTOS · FABRICACIÓN</p>
   </div>`;
 }
+function buildCertEmployeeOptions(){
+  const prev = $("certEmployee").value;
+  const seen = new Set();
+  const activos = allContracts
+    .filter(x=>x.empleado_id && !seen.has(x.empleado_id) && seen.add(x.empleado_id))
+    .sort((a,b)=>(a.empleado_nombre||"").localeCompare(b.empleado_nombre||"","es"));
+  const inactivos = allInactivos.slice()
+    .sort((a,b)=>(a.empleado_nombre||"").localeCompare(b.empleado_nombre||"","es"));
+  $("certEmployee").innerHTML = '<option value="">Selecciona un colaborador...</option>' +
+    (activos.length ? '<optgroup label="Activos">' + activos.map(x=>`<option value="A:${x.empleado_id}">${esc(x.empleado_nombre)}</option>`).join("") + '</optgroup>' : "") +
+    (inactivos.length ? '<optgroup label="Inactivos">' + inactivos.map(x=>`<option value="I:${x.empleado_id}">${esc(x.empleado_nombre)} (salida ${dateEC(x.fecha_salida)})</option>`).join("") + '</optgroup>' : "");
+  if(prev) $("certEmployee").value = prev;
+}
+function certSelected(){
+  const [tipo,id] = String($("certEmployee").value||"").split(":");
+  if(!id) return null;
+  if(tipo==="I"){
+    const x = allInactivos.find(c=>String(c.empleado_id)===id);
+    return x ? {inactivo:true,nombre:x.empleado_nombre,cargo:x.cargo,salario:x.ultimo_sueldo,inicio:x.fecha_ingreso,fin:x.fecha_salida} : null;
+  }
+  const x = allContracts.find(c=>String(c.empleado_id)===id);
+  return x ? {inactivo:false,nombre:x.empleado_nombre,cargo:x.cargo,salario:x.salario,inicio:x.fecha_inicio,fin:""} : null;
+}
 function validCertificate(){
-  if(!$("certEmployee").value){alert("Selecciona un colaborador.");return false;}
+  const s = certSelected();
+  if(!s){alert("Selecciona un colaborador.");return false;}
   for(const id of ["certId","certJob","certStart","certCity","certSigner","certSignerJob"]){if(!$(id).value.trim()){alert("Completa cédula, cargo, fecha de ingreso, ciudad y datos del firmante.");$(id).focus();return false;}}
+  if(s.inactivo){
+    if(!$("certEnd").value){alert("Para un colaborador inactivo ingresa la fecha de salida.");$("certEnd").focus();return false;}
+    if($("certEnd").value < $("certStart").value){alert("La fecha de salida no puede ser anterior a la fecha de ingreso.");$("certEnd").focus();return false;}
+  }
   if($("certType").value==="con_sueldo"&&(!$("certSalary").value||Number($("certSalary").value)<=0)){alert("Ingresa un sueldo mensual válido.");return false;}
   return true;
 }
@@ -2644,20 +2677,23 @@ function longDate(iso){
   return `${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
 }
 function fillCertEmployee(){
-  const id=Number($("certEmployee").value);
-  const x=allContracts.find(c=>Number(c.empleado_id)===id);
-  if(!x)return;
-  $("certJob").value=x.cargo||"";
-  $("certSalary").value=x.salario||"";
-  $("certStart").value=x.fecha_inicio||"";
+  const s = certSelected();
+  $("certEnd").value = "";
+  if(!s) return;
+  $("certJob").value = s.cargo || "";
+  $("certSalary").value = s.salario || "";
+  $("certStart").value = s.inicio || "";
+  $("certEnd").value = s.fin || "";
 }
 function certificateData(){
-  const x=allContracts.find(c=>Number(c.empleado_id)===Number($("certEmployee").value));
+  const s = certSelected();
   return {
-    nombre:x?.empleado_nombre||"",
+    nombre:s?.nombre||"",
+    inactivo:!!s?.inactivo,
     id:$("certId").value,
     cargo:$("certJob").value,
     startLong:longDate($("certStart").value),
+    endLong:longDate($("certEnd").value),
     salario:Number($("certSalary").value||0).toLocaleString("es-EC",{minimumFractionDigits:2,maximumFractionDigits:2}),
     ciudad:$("certCity").value,
     treatment:$("certTreatment").value,
