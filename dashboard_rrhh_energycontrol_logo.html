@@ -1,12 +1,16 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+  <meta name="referrer" content="no-referrer">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard RRHH | ENERGYCONTROL S.A.</title>
   <meta name="description" content="Dashboard interno de contratos y seguimiento RRHH de ENERGYCONTROL S.A." />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.6/dist/pizzip.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docxtemplater@3.44.0/build/docxtemplater.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
   <style>
     :root{
       --green:#80BD01;
@@ -185,6 +189,7 @@
 
     .kpi.clickable{cursor:pointer;transition:transform .15s ease,box-shadow .15s ease}
     .kpi.clickable:hover{transform:translateY(-2px);box-shadow:0 14px 34px rgba(31,56,100,.14)}
+    .kpi.clickable.active{box-shadow:0 0 0 2px var(--navy) inset,0 14px 34px rgba(31,56,100,.14)}
     .type-grid{display:flex;flex-wrap:wrap;gap:9px}
     .type-chip{
       border:1px solid #dfe7ef;background:#f8fafc;color:var(--navy);border-radius:999px;
@@ -233,7 +238,7 @@
       background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
     }
     .filters{
-      display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:10px;padding:16px;border-bottom:1px solid var(--line);
+      display:grid;grid-template-columns:2fr repeat(4,minmax(150px,1fr)) auto;gap:10px;padding:16px;border-bottom:1px solid var(--line);
     }
     .filters input,.filters select{
       width:100%;border:1px solid #dbe3ee;border-radius:10px;padding:10px 11px;background:#fff;outline:none;
@@ -271,6 +276,8 @@
     .badge.PROXIMO_VENCER{background:#fff0d9;color:#b45309}
     .badge.URGENTE,.badge.VENCIDO{background:#fee2e2;color:#b91c1c}
     .badge.INACTIVO{background:#e5e7eb;color:#475569}
+    .badge.EVALUADO{background:#e8f6ea;color:#166534}
+    .badge.ANULADA{background:#f1f5f9;color:#64748b}
     .days.urgent{color:#b91c1c;font-weight:900}
     .days.soon{color:#b45309;font-weight:900}
     .days.ok{color:#166534;font-weight:800}
@@ -333,25 +340,124 @@
     .toolbar-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:var(--shadow);margin-bottom:16px}
     .toolbar-flex{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.toolbar-flex>div{min-width:180px;flex:1}
     .status-note{padding:10px 12px;border-radius:10px;background:#f8fafc;color:var(--muted);font-size:13px}
-    .status-note.ok{background:#eef8df;color:#527d00}.status-note.err{background:#fff1f2;color:#b91c1c}
+    .status-note.ok{background:#eef8df;color:#527d00}.status-note.err{background:#fff1f2;color:#b91c1c}.status-note.warn{background:#fff8e6;color:#8a5a00}
+    .saved-card{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;position:relative}
+    .saved-card-actions{position:absolute;top:10px;right:10px;display:flex;gap:6px}
+    .part-warning{grid-column:1/-1;background:#fff8e6;color:#8a5a00;border-radius:8px;padding:6px 10px;font-size:12px;margin-top:-4px}
     .eval-table-wrap,.commission-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px;background:#fff}
     .eval-table,.commission-table{width:100%;border-collapse:collapse;min-width:980px}
     .eval-table th,.eval-table td,.commission-table th,.commission-table td{padding:11px 12px;border-bottom:1px solid var(--line);font-size:13px;text-align:left;vertical-align:middle}
     .eval-table th,.commission-table th{background:#f8fafc;color:var(--navy);font-size:12px;text-transform:uppercase;letter-spacing:.02em}
     .btn-mini{border:1px solid #d7dee9;background:#fff;color:var(--navy);padding:7px 9px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer}
-    .btn-mini:hover{background:#f7fafc}.btn-mini.green{background:#eef8df;color:#527d00;border-color:#d5e9a8}.btn-mini.blue{background:#edf4ff;color:#1d4ed8;border-color:#cfe0ff}
+    .btn-mini:hover{background:#f7fafc}.btn-mini.green{background:#eef8df;color:#527d00;border-color:#d5e9a8}.btn-mini.blue{background:#edf4ff;color:#1d4ed8;border-color:#cfe0ff}.btn-mini.danger{background:#fff1f2;color:#b91c1c;border-color:#fecdd3}
     .commission-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:14px 0}
-    .commission-kpis .mini{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}.commission-kpis .mini .l{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase}.commission-kpis .mini .v{font-size:19px;font-weight:800;color:var(--navy);margin-top:6px}
+    .commission-kpis .mini{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}.commission-kpis .mini .l{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase}.commission-kpis .mini .v{font-size:19px;font-weight:800;color:var(--navy);margin-top:6px}.commission-kpis .mini .kpi-d{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.35}.cost-click-hint{font-size:12px;color:var(--muted);margin:-4px 0 10px}#costDepartmentBody tr{cursor:pointer;transition:background .15s}#costDepartmentBody tr:hover{background:#f3f8e6}#costDepartmentBody tr.dept-selected{background:#e6f2c7;box-shadow:inset 4px 0 0 #7db900}.cost-detail-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.cost-dept-chip{display:inline-flex;align-items:center;gap:8px;background:#e6f2c7;color:#12325b;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700}.cost-dept-chip button{border:0;background:#12325b;color:#fff;border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer}#costContent.view-fixed .col-com{display:none}#costSplitKpis .mini.split-costo{border-left:4px solid #12325b}#costSplitKpis .mini.split-gasto{border-left:4px solid #7db900}#costSplitKpis .mini.split-sin{border-left:4px solid #d69e2e}.cost-split-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:#edf1f6;margin:0 0 6px}.cost-split-bar span{display:block;height:100%}.cost-split-check{font-size:12px;color:var(--muted);margin:0 0 16px}.cost-split-check b{color:var(--navy)}.acc-tag{display:inline-block;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:800;white-space:nowrap}.acc-costo{background:#e3ebf6;color:#12325b}.acc-gasto{background:#e6f2c7;color:#3d5a00}.acc-mix{background:#eef0f4;color:#52647a}.acc-sin{background:#fdf1dc;color:#9a5b00}#costContent.view-fixed #costBreakdownKpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}
     .commission-panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);margin-bottom:16px}
     .commission-panel h3{margin:0 0 14px;color:var(--navy)}
+    .cost-private{display:flex;align-items:center;gap:8px;background:#eef8df;color:#527d00;border:1px solid #d5e9a8;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:800}
+    .cost-bars{display:grid;gap:12px}.cost-bar-row{display:grid;grid-template-columns:minmax(150px,1.4fr) 3fr 120px;gap:12px;align-items:center;font-size:13px}.cost-bar-name{font-weight:800;color:var(--navy)}
+    .cost-bar-track{height:12px;border-radius:999px;background:#edf2f7;overflow:hidden}.cost-bar-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#7db900,#a5cf39)}.cost-bar-value{text-align:right;font-weight:800;color:var(--navy)}
+    .cost-assumptions{margin-top:12px;font-size:12px;line-height:1.5;color:var(--muted)}
+    .cost-trend-head{display:flex;align-items:end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:10px}.cost-trend-head h3{margin-bottom:4px}.cost-trend-head p{margin:0;color:var(--muted);font-size:13px}
+    .cost-trend-control{min-width:250px}.cost-trend-control label{display:block;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;margin-bottom:5px}.cost-trend-control select{width:100%;padding:10px 12px;border:1px solid #d7dee9;border-radius:10px;background:#fff;color:var(--navy)}
+    .cost-trend-summary{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 4px}.cost-trend-chip{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:8px 11px;color:var(--muted);font-size:12px}.cost-trend-chip b{color:var(--navy);font-size:14px}.cost-trend-chip.positive{background:#eef8df;color:#527d00}.cost-trend-chip.negative{background:#fff1f2;color:#b91c1c}
+    .cost-trend-chart{width:100%;overflow-x:auto}.cost-trend-chart svg{display:block;width:100%;min-width:680px;height:auto}.cost-trend-empty{padding:32px;text-align:center;color:var(--muted)}
     .invoice-check{width:18px;height:18px}.right{text-align:right!important}.center{text-align:center!important}
     .participant-row{display:grid;grid-template-columns:2fr .8fr 1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px}
     .participant-row input,.participant-row select{width:100%;padding:9px;border:1px solid #d7dee9;border-radius:9px}
     .saved-card{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:8px;background:#fbfdff}
     .modal.wide{width:min(880px,calc(100vw - 32px))}
     @media(max-width:1000px){.commission-kpis{grid-template-columns:repeat(3,1fr)}.eval-grid,.commission-grid{grid-template-columns:1fr 1fr}.participant-row{grid-template-columns:1fr 1fr}.participant-row .wide-part{grid-column:1/-1}}
-    @media(max-width:650px){.commission-kpis{grid-template-columns:1fr 1fr}.eval-grid,.commission-grid{grid-template-columns:1fr}.eval-grid .span-2,.commission-grid .span-2,.eval-grid .span-3,.commission-grid .span-3{grid-column:auto}.participant-row{grid-template-columns:1fr}}
+    @media(max-width:650px){.commission-kpis{grid-template-columns:1fr 1fr}.eval-grid,.commission-grid{grid-template-columns:1fr}.eval-grid .span-2,.commission-grid .span-2,.eval-grid .span-3,.commission-grid .span-3{grid-column:auto}.participant-row{grid-template-columns:1fr}.cost-bar-row{grid-template-columns:1fr}.cost-bar-value{text-align:left}}
 
+    /* IMPRESIÓN — comprobante de comisión / certificado */
+    #printArea{display:none}
+    @page{size:A4 landscape;margin:12mm}
+    @media print{
+      body *{visibility:hidden}
+      #printArea, #printArea *{visibility:visible}
+      #printArea{display:block;position:absolute;top:0;left:0;width:100%;padding:10px;box-sizing:border-box}
+      .print-header{display:flex;align-items:center;gap:16px;border-bottom:3px solid var(--navy);padding-bottom:12px;margin-bottom:16px}
+      .print-header img{height:64px}
+      .print-header h1{font-size:20px;color:var(--navy);margin:0}
+      .print-header p{margin:2px 0 0;color:var(--muted);font-size:13px}
+      .print-title{text-align:center;font-weight:800;font-size:19px;margin:6px 0 16px;text-transform:uppercase;letter-spacing:.05em;color:var(--navy)}
+      .print-meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 28px;margin-bottom:16px;font-size:14px}
+      .print-meta div b{color:var(--navy)}
+      .print-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px}
+      .print-kpis div{border:1px solid #cbd5e1;border-radius:10px;padding:10px 12px}
+      .print-kpis .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+      .print-kpis .value{font-size:24px;font-weight:800;color:var(--navy);margin-top:2px}
+      .print-kpis .value.warn{color:var(--danger)}
+      .print-section-title{font-weight:800;font-size:15px;color:var(--navy);margin:18px 0 8px}
+      .print-table{width:100%;border-collapse:collapse;font-size:14px;margin-bottom:14px;table-layout:fixed}
+      .print-table th,.print-table td{border:1px solid #cbd5e1;padding:8px 10px;text-align:left;word-wrap:break-word}
+      .print-table th{background:#f1f5f9;color:var(--navy);font-size:12px;text-transform:uppercase}
+      .print-table td.num,.print-table th.num{text-align:right}
+      .print-totals{display:flex;justify-content:flex-end;gap:32px;font-size:16px;margin-bottom:28px}
+      .print-totals b{color:var(--navy);font-size:20px}
+      .print-sign{display:flex;justify-content:space-between;margin-top:50px;font-size:13px}
+      .print-sign div{width:45%;text-align:center;border-top:1px solid #333;padding-top:6px}
+      .print-footer{margin-top:22px;font-size:11px;color:var(--muted);text-align:center}
+    }
+
+    /* ── Empleados inactivos (Resumen) ── */
+    .inac-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+    .inac-count{display:inline-block;background:#e5e7eb;color:#475569;border-radius:999px;padding:2px 10px;font-size:13px;margin-left:6px;vertical-align:middle}
+    .filters.inac-filters{grid-template-columns:2fr 1fr 1fr;padding:4px 0 12px;border-bottom:0}
+    .inac-table th[data-isort]{cursor:pointer}
+    .inac-table th[data-isort].sorted:after{content:" ▾"}
+    .inac-table th[data-isort].sorted.asc:after{content:" ▴"}
+    .inac-wrap{max-height:460px}
+    #module-resumen .kpis{grid-template-columns:repeat(7,minmax(130px,1fr))}
+    .kpi.gray:before{background:#94a3b8}
+    .inac-collapse{margin:-4px 0 18px;animation:inacDown .2s ease}
+    @keyframes inacDown{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+    @media(max-width:1200px){#module-resumen .kpis{grid-template-columns:repeat(4,minmax(130px,1fr))}}
+    @media(max-width:700px){#module-resumen .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    /* Lista desplegable de personal por facturación */
+    .ext-list{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
+    .ext-group{display:flex;justify-content:space-between;gap:10px;padding:10px 16px;background:#f3f8e6;color:var(--navy);font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+    .ext-item{border-top:1px solid var(--line)}
+    .ext-item-head{width:100%;display:flex;align-items:center;gap:12px;padding:13px 16px;background:#fff;border:0;cursor:pointer;text-align:left;font:inherit;color:inherit}
+    .ext-item-head:hover{background:#f7faf0}
+    .ext-caret{transition:transform .2s;color:var(--muted);width:14px;flex:none}
+    .ext-item.open .ext-caret{transform:rotate(90deg)}
+    .ext-item.open .ext-item-head{background:#eef6dc}
+    .ext-name{font-weight:800;color:var(--navy);flex:1}
+    .ext-cargo{color:var(--muted);font-size:12px;min-width:170px}
+    .ext-amount{font-weight:800;color:var(--navy);min-width:130px;text-align:right;white-space:nowrap}
+    .ext-body{display:none;padding:6px 16px 18px 42px;background:#fbfcfd;border-top:1px dashed var(--line)}
+    .ext-item.open .ext-body{display:block}
+    .ext-body h4{margin:16px 0 8px;color:var(--navy);font-size:13px}
+    .ext-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:12px 0}
+    .ext-stat{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px}
+    .ext-stat .l{font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase}
+    .ext-stat .v{font-size:15px;font-weight:800;color:var(--navy);margin-top:4px;white-space:nowrap}
+    .ext-stat.red .v{color:#b91c1c}.ext-stat.amber .v{color:#9a5b00}.ext-stat.zero .v{color:#94a3b8}
+    .ext-total{display:flex;justify-content:space-between;padding:13px 16px;background:#1F3864;color:#fff;font-weight:800}
+    .ext-body .commission-table{min-width:700px}
+    @media(max-width:900px){.ext-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.ext-cargo{display:none}.ext-body{padding-left:16px}}
+    /* ── Personal por facturación ── */
+    .ext-red{color:#b91c1c;font-weight:800}
+    .ext-amber{color:#9a5b00;font-weight:700}
+    .ext-group-row td{background:#f3f8e6;color:var(--navy);font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
+    .ext-sub-row td{background:#fafbfc;font-weight:800;color:var(--navy)}
+    .ext-total-row td{background:#1F3864;color:#fff;font-weight:800}
+    .ext-row{cursor:pointer;transition:background .15s}
+    .ext-row:hover{background:#f3f8e6}
+    .ext-row.sel{background:#e6f2c7;box-shadow:inset 4px 0 0 #7db900}
+    .ext-flag{display:inline-block;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:800;margin-left:6px;background:#fee2e2;color:#b91c1c;vertical-align:middle}
+    .ext-flag.amber{background:#fdf1dc;color:#9a5b00}
+    #extKpis .mini.red{border-left:4px solid #b91c1c}
+    #extKpis .mini.navy{border-left:4px solid #1F3864}
+    #extKpis .mini.amber{border-left:4px solid #d69e2e}
+    .ext-muted-col{color:#94a3b8}
+    #extBody td:first-child{min-width:250px}
+    #extBody td:nth-child(2){min-width:150px}
+    #module-externo .commission-table td.right,#module-externo .commission-table th.right{white-space:nowrap}
+    #extBody .ext-flag{white-space:nowrap}
+    @media(max-width:900px){.filters.inac-filters{grid-template-columns:1fr}#extKpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
   </style>
 </head>
 <body>
@@ -359,7 +465,7 @@
 
 <section id="publicEvalView" class="eval-public hidden">
   <div class="eval-public-card">
-    <div class="brand" style="margin-bottom:18px"><div class="brand-mark">E</div><div><h1 style="margin:0">ENERGYCONTROL S.A.</h1><small>Evaluación de colaborador</small></div></div>
+    <div style="margin-bottom:24px"><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABWYAAAJTCAYAAACLoM8XAAAACXBIWXMAABcRAAAXEQHKJvM/AAAgAElEQVR42uzdz2pc6d4v9m+bDrxJDliZvTPrJRklA2vPMjjg6gWBM2vt3ICrRwZjaPUNVKvrBrYajMEQsDzN5JVvYHWJXMCWxglsaZZB4JUgJyecDJzBWuqW1bItqWr9/3zA7N3dcq2q53lqrVVf/er3fPPx48cAANC8ZVlsJ9lOspNkq/7XF0lOkpwtivLMKAEAwDR8I5gFANicZVlspQpet/NHCLud5OkdH+I8yVmqsPYqtL1YFOXK6AIAwHgIZgEAHmBZFjv5I3S9qoB91sKhj3MtsI1qWwAAGCTBLADAPdTtCA7TTgh7H+dJjpIcLoryxEwBAEC/CWYBAO6gblGwn+THATxdIS0AAPScYBYA4CuWZbGXKpR9PMCnL6QFAIAeEswCAHzGsixmqdoWPBnJSzqvX8+hnrQAANAtwSwAwA097iO7Saf1azwS0gIAQPsEswAAtYH1kd0kIS0AALRMMAsAkMH3kd0kIS0AALRAMAsATFpdJbtK8tRo/Mn7JPsCWgAA2LxHhgAAmLjDCGU/53mSfyzL4rDuuwsAAGyIilkAYLKWZTFP8s5I3JkKWgAA2BDBLAAwSXUF6En0lL2vyyQHSQ4WRXlhOAAA4GEEswDAJC3L4iRaGKxDQAsAAGsQzAIAk7Msi/0kPxuJjRDQAgDAA9j8CwCYlGVZzCKU3aTH9XieLctiz3D0cs3vGAUAgP5RMQsATMayLLZS9ZV9YjQac55qg7BDQ9H62t5Jsl3/mSXZytfbdZwnOfvMfztJclUFfbQoyhMjDQCwOYJZAGAylmVxlOR7I9EKAW0za3gnVeA6yx8h7E7a2cTuPMkqVUh7ZDYAANYjmAUAJmFZFvMk74xE6wS0D1uvW0l2c7/q1zZdpg5pUwW1+gsDANyTYBYAGL1lWWyn+lr2Y6PRmdMke4uiXBmKL67T3VRB7PcDnN/DVCHtmdkEAPg6wSwAMHrLsjhJv6oNp+w4VUCrX2l+b00wTxXGjmWNnqcKaQ9U0gIAfJ5gFgAYtWVZ7Cf52Uj0zi+Lotyf6JrczR+VsWPeiO40yVwIDwBwO8EsADBqy7I4S3/Cr8v8sdP99f/95yT/Psl/SPLfTmh6JhHcXesXexXGTq2lxk+LojxwNgIA+JRgFgAYrbpn5z9aPuxx/b+ra/97cdfw8Vqf0Xmm035hdNWz1+ZxN8kz78Z8SBXCa20AAFATzAIAo7Usi3mSdxt+2Kuq11X9z6skaWJTq4mFtMepgruzAa+37XqudqOn8W3O6zleGQoAAMEsADBiy7I4TPJ8gw/ZWdXfRELayyT7Q/vae72B196G19qYTba/MADAdYJZAGC0Nthf9jzJ3qIoj3ryunbyR2XmGDePGkT1bL2J1160KnjoHO9qbQAATJlgFgAYpQ32l/01VRXnRU9f51hD2stU4exRz8Z7qx7vvYwzFJ/8HAMAtEUwCwCM0gb6yw6uH+ZIQ9pebBpVB/179fg+9g7bqL8KZwGAKRLMAgCjtGZ/2cH3wBxZ39POKiuXZTFLFcbqH9uc8yQ72hoAAFMjmAUARumB/WVPUwWAJyMah+0khxlHH9T3qXr9XrQwbvNUwfZT76ZW2BAMAJgcwSwAMDoP6C97maqP7MGIx2SWKqAdeouDxlpM1P1jr9oV6B/bvn/p+4ZvAACbJJgFAEbnnv1lj1MFfWcTGZu9JPsZfp/UjW3KVgf5+6l68+of253jRVHODAMAMBWCWQBgdO7RX/anMVfJfmF8tlIFkT8O/KWcJ9l9aOuJug/vQcbR5mEsbAQGAEyGYBYAGJ079pe9XBTl1sTHaTvj6D97r/6kdTB9EBt69ZGNwACAyRDMAgCjUodu/3aHH/2wKMpdIzaa/rNf3bjtWg/ZvWhZ0Gc2AgMAJuGRIQAARmZ2x5/zdenaoihXi6LcTvJTqo3Qhmj7S3Nf9x0+SfJzhLJ993NdzQ0AMGqCWQBgbGZ3/LmVofpU3W93O9XGWkPyIdXX3//UL3hZFrNlWaxSbQb3xCwPxqEhAADGTisDAGBU6hDuaz1TTxdFuWO0vjiO2+l//9nzVO0LVp95/vvRR3bIbAQGAIzat4YAAJggYc9XLIryLMms7j97lH59/f8yycFtfUj1kR2Vg2VZrGwEBgCMlVYGAMDY3CXEEczeUV2Nup2qXUAfXLUt2L/5H+o+smfRR3YsniSZGwYAYKxUzAIAY3OS5Psv/PfLRVGeGKa7qysWd5dlsZeqPUAXoeeX2hbMkhwkeWq2RmfbEAAAYyWYBQCmRrXsAy2K8mBZFkf1GLYVgn6pbcF2qkD2e7PzJ6dJ/o8k/y7JP9X/7p+S/PPAXsd/byoBgLESzAIAUyOYXUPde3ZnWRb7qVoGNOlDkr36mL+r+8juJ/nRjCRJjlO1cDhJcnJbVfFt6krjK9v5ozp1N/2pPt4yvQDAWAlmAYCp2Y1wdhMO0lyAd5lk9zNtC7psp9AHx6kD2FQh7IPbcnwhwN2v+/Ue9GCcHy/LYvtmOA8AMAbffPz40SgAAKNxx0rOfxH0rDXGW0lWaSaU/ZCql+zFjWPuJDnMtPrIHtfjfJY1Q9g15nkvzVdGf813d60CBgAYEhWzAMAU7cdu7w9SB6RHSZ5s+KEvU7UtOLzlmPvpPhxsy2mqStWjm+F02+rj7y/L4jBVKP6so6cySxVQAwCMimAWABibu4RZz5dlsa9q9n7qUHaVzX+9/TRV64KzG8fbTrsbjXXlMlXwedh2Vexd1PMyq3vSHmbzofzXbHv3AQBjJJgFAMbmrsHWPFXlLHfQYCj7y6Io92853hR6yX5IFcYOoudx3U5gu4O52fYOBADGSI9ZAGBU6qq+3+7wo5dJtrv+uvhAxrSJUPY8VZXsyY1jbaWqkn020uE8zR/VsRcDXxN/b+t4i6L8xjsRABibR4YAAJiox6k2NuILGgpl3yfZuSWU3U210dXYQtnLJL8m+cuiKHcWRXkw9F8I1HN33OI63PZuBADGRisDAGDK9pZlcaBq9nYNhLKXSeY3v7pfV8keJvl+ZEM4qFYFD7Cfu1Wnb8JOqtAeAGA0VMwCAFOmavYzGghlj1O1jrgZys5S9QUeSyh7muSnJP/Noih3RxzKXvWcPW3pcDvelQDA2KiYBQCmbh6bgH2igVD2p0VRHtw4xlY97j+OZNiOk+zXYeWUHCR518JxBLMAwOiomAUAxua+bQmeLMtibtgqGw5lT1P1VT34zDHGEMqeJ/luUZSzCYayWRTlYT0GTdv27gQAxkYwCwCMys0Npe5o38htPJT9Ncnslg2+9pP8PcnTgQ/XeZIfFkW5PcVAtoP3z1PvUABgbLQyAACoq2br6r9J2mAoe5lk92ZYuSyL7SRHGUcguz/ltXKLo1QtDR43eIxLwwwAjI2KWQCAyv5UX/gGQ9kPqTb4Wt14/L1UG3wNOZS9TNUrd1so+6lFUV6kCmabdGKkAYCxUTELAIzRae4fAj5ZlsXuoiiPpjRQGwplL1NVkd62wddRkmcDHqLLVKHjQR1AcruDJHtptmoWAGBUVMwCAGO0euDf25vSIG0olD1NsnNLKLub5CzDDWUvk/ySqgJ4Xyj7ZfX4nPTwPQ0A0FsqZgGAMVol+fEBf+/ZsixmU9jMaUOh7C+Loty/5bEPHjj+ffFrqgpgYSwAAI0RzAIAY7RO5d5+ktmYB2cDoex5kvktvWS3khwm+X6gQ/M+VSB75i3UO+YEABgdrQwAgNGpg7XzB/71Z8uymI11bDYQyr5P1bpgdeNxt+vHHWIo+z7JvyyKci6U7S3zAgCMjopZAGCsVkmeP/DvHi7LYmdsX2VfM5S9TLK3KMrDDT9ul45TVf6eebtsxE6Dj62tBAAwOoJZAGCsVnl4MPskVUuD0WwGtoFQdrYoypNbHnee5N3AhuPWVgysrbFg/ra1BwAwdFoZAABjtVrz7/84lpYGa4ayp0m2PxPKHmR4oeyvuaUVAwAAtO2bjx8/GgUAYJSWZXGR9ar4zlOFeBcDHoN1QtkPqSpLL2485laSoyTPBjQUqmSbX2tNfbA4XRTljhEGAMZGKwMAYMxWWW8zqiep2hnsD/HFrxnKvl8U5fwzj3mY5OmAhuLXJPtj6xncw7XWFPMGAIySVgYAwJitNvAYPzccOjVizVD2h8+EsrP6MYcSyp4n+W5RlHtC2cZtNfjYZ4YXABgjFbMAwJitNvQ4h2l2x/mNWiOUvUz1df+jWx5znmH1k/1lUZT73gKjcGYIAIAxUjELAIzWBndyf7osi/0hvOY1Q9nZZ0LZwwwnlD1N8hehLAAAfadiFgAYu+NsZpOqn5dlcbTBsHfjlmWxm6q6976h7GmqUHbom3ypku1OkxXlK8MLAIyRilkAYOxWG3ysw76+yLrVwL/m/qHs+9weyu4kOckwQllVst3bMgQAAPcjmAUAxm61wcfqZUuDNfq//rooyvktoexuPW5Pej63l0l+WhTlTp8rmSeiyYpZcwsAjNI3Hz9+NAoAwKgty2LTNzx/6UsQuEYo+8OiKA9veby9JH8bwLQep9qo7MwK73wNbiX5t4Ye/sOiKHeNMgAwRnrMAgBTsKk+s1cO02yF4J00EMoeJnne87m8TLK/KMoDy7o3mgxOV4YXABgrrQwAgCnYdHXr07qytDObDGWXZbG1LIuT9D+UPU6yI5TtnXmDj31keAGAsRLMAgBTsGrgMfeXZbHdxYvZdChbj8/THs/fVS/ZmdYF/VK/B5raIO7UfAMAYyaYBQCmYNXAYz5O1dKgVRsOZbfT/1D2OMm2KtnearKNwaHhBQDGTDALAIzeoigvkpw28NDP2mxpsOFQdidVi4c+h7K/1lWyF1ZxbzW5/rUxAABGTTALAExFUxWXrbQ0WCOU/ekzoewqVdVvH12mCpP3LNv+qtfRk4Ye/lwbAwBg7ASzAMBUHKUK/Dat8ZYGa4Sy72+2ABhAKHueZHYzTKaX5g2/XwEARk0wCwBMQv11+KbCnsZaGqwZys5vPFbfQ9kPSXYWRXlixQ7CvMHHPjS8AMDYCWYBgClpcgOpjbc0mFgo+8uiKHf1kx2GZVnsNriWzoXzAMAUCGYBgMmow57Thh5+oy0NJhTKXib566Io963QQdlt8LFXhhcAmALBLAAwNU1WzT6rKwnXMqFQ9jRVP1n9RAdkWRZbSZ43eAjrAQCYBMEsADA1TW0CduWwDq4eZEKh7PtUoayvrA9Pk9Wyl4J6AGAqBLMAwKQ0vAlYskZLgwmFsj8tinKun+xgNRnMCmUBgMkQzAIAU3TQ8ON/f9+WBhMJZS+TfLcoygNLcJjqDe6+b/AQK6MMAEyFYBYAmJyGNwG7cueWBmuEsqcDCmVPk+wsinJlBQ7avOHHVzELAEyGYBYAmKqmqzbv1NJgnVA2yezGY/U1lL3qJ3tm2d3dsix2lmVxVq+RPjyfrSR7DR7ig/YWAMCUCGYBgKlqehOw5CstDdYNZa+HWPVxVulfKPuDfrL3dy1kf5LkXf3PXTtoeH2plgUAJkUwCwBMUh0UHrZwqFtbGmw4lJ0n+df0K5S9TPKXRVEeWm33U8/n6sZ8Ht21NUZDz2knyfOGD7My+wDAlAhmAYApa2MTqj+1NGgglH3Xs3E9TbJd9/LlHq7N582Q/Una+UVCV++V91pdAABTI5gFACarDoKOWzjU98uymCWTCGV/XRTljtYF97csi/2vzOf39c+0/bx2kzxr+DD7VgAAMDWCWQBg6g7bOs6yLF5mvKHsZap+snuW1P0ty+Iwyc93+NGfr0L+FqmWBQBowDcfP340CgDApC3L4iL92zTryn9M8j8sivL82vOdJfmtR8/xMlVwrHXB/dfeVqpfDnx/z/HebqMqua7Q/bnhw/yLYBYAmCIVswAA3fbu/JLLJP/+Rii7k37tXi+UfaA6lF3lfqFsckvf4oae33aSpiugVcsCAJMlmAUAaGcTsPv6U+BZB3lH6U91r1D2geqAfZXk6QMf4vtlWTQdmu63sNb2rQYAYKoEswDA5LW4Cdh97N0Syq6SPOnJ87vqeyuUvacNhLJX/lY/VhPPcZbkecND8UG1LAAwZYJZAIDKYY+eyw+Lorz5fA6yfpC3KULZB6oDz1U2V4l6WIf2m7bfwnAcWBEAwJQJZgEAktRB6GUPnsr7m6HssiwO0nz14l1dhbIXVs39LMtinmrTtk22B3iaDQec9fN81vBwHC+KcmVVAABTJpgFAPjDYcfHP10U5fz6v6hDsh97Mj5C2Qeq+8G+a+jhny/LYndDz3Mr7VSy7lsVAMDUCWYBAP6wn+6qZi+TzK7/i/pr7+96MjYfIpR9kGVZHCb5W8OH2VRLg700v+GXalkAgAhmAQB+V4eOXfW9/CT0rDd1OurJ0LxfFOWuUPb+lmWxnWS3hUM9zpoV3/Vz/bmF57pvZQAACGYBAG46SHLe8jF/uL6RVl35eJTmKxfv4v3N9grc3aIoz5K0NX7f160v1ln7TVMtCwBQE8wCAFxTV4Xut3jITzb7qkPZVZInPRgOoexm1tRRkl9bOtxBXfl6L3XbjO9beH77VgQAQEUwCwBwQx2UnrZwqNNbgs+DJE97MAw/CWU3uqb2WlpTD21poFoWAKBlglkAgNvtNfz4t232dZDkeQ9e+w+LojywBDZulnY2l3u2LIs7r9/6Z9v4ZcC+JQAA8IdvPn78aBQAAG6xLItVkmcNPfxfbvSVnSd514OX/cP11gpsfE3NkvzWwqEuk+zUPW778HzOF0W5bQUAAPzhW0MAAPBZ8yT/aOBxb272NYtQ9rOWZbGTZCfJdpKzJCfXx29IFkW5WpbFL0l+bvhQVy0NZl8Y16tN5tqw73QCAPApFbMAAF+wLIvDbLa9wCcbatWh4ypVkNaVyySzPoSddVi4myqI3cmXK5aPk5zUf47qjduGsq5Waa4a+7q/1puPdfkcVMsCANxCj1kAgC/bz+b6gp7eCGWvKhaFsvm9cvgkVfXwj/l6aPis/rl3Sc6WZbE7oHW1m3b6zR7W6+zmWO+nnVD26j0EAMANglkAgC+oe3RuYiOsTzb7qsOyVZInHb68XoSyy7LYqjc++22N8Xic5F+XZXFrENnDdXWRqlVG0x7fXL91AP5zSy/1VM9iAIDbCWYBAL7uIOtXN+7e+Kr9QZKnHb6mvoSyV60cftzQQz5PclKHj71Wtxj4tYVDHV4b7zb7yibthM8AAIMkmAUA+Io6UN1b4yF+XRTl6uof6q+RP+/wJfUllN1N8vdsPqB+kuS3ZVnMB7C29pKcNniIX66vvbTbOuOXoW7SBgDQBsEsAMAd1F/HPn/AXz2tw7ckv1eI/tzhS+lN+4Jcq+RsyMGyLLYHsLzmaabf7PGiKPevjflB2usre57NtAABABgtwSwAwN3N7/nzl9f/TgdfI7/1NfSkivEwzVduPk7z4e/a6vnY2/DDXqbaYOxq7e1mc+0i7rrOLpwyAAA+TzALAHBH9VfCj+/xV/ZvhKAH6Xazrx/qvqadqkPC71s63LNlWewNYG0dJvmwwYf8vadxXTV82OLL+fVG+wQAAG4hmAUAuJ+7hnwfFkX5+1e56zCyy76yv9ThX6daamFw037dQqLv5tlMS4OfOuwre55k32kCAODrBLMAAPdQV8C+/8qPnefTFgbb6fYr9e+v9xrt2EHaCwmvPM4AwsK6wnW+5sPc/IXAQTa/udqX7GlhAABwN4JZAID72//Kf7/ZX/Mw7YeRVz4sinLeo7HrqnL1+yEsrLrVxENbGpzm018ItN1X9kMfWmUAAAyFYBYA4J4WRXmW5JfP/Odfrn+NvO5v+qyjp/pJUNe1uo3B0w6PvzOQJTZPVXV9H5e59guB+rUetvicL/u01gAAhkAwCwDwMAf5cz/Q0+stA+pw7G8dPb/TJLOefa18Z+LHv5MHtjSYX200d62Pb5tV2nMtDAAA7kcwCwDwAHUItX/tX10m2b36h442ubr+XPoYlM06Pv7OgNbXKsmvd/zxn260EGi7r+yxFgYAAPcnmAUAeKB6k6Wrr5zv1S0Oruynm6/tX6aqlD3p4ZCpmL2f/Xy9pcH7G5t9zZM8b3m9zZ0NAADuTzALALCevVSbHh1e/YsONl26brenoWzSfTD6bEgLq6543vvCj5xe39itbp1x0PLT3L/xCwkAAO5IMAsAsIZFUR4tirIvLQx+uL7xWA913VrhcojrK8mHW/7Tea61huior+zx9WpdAADuRzALALBZR2k3HLvy0/Wq3Z46mfjxH2qeT0Ply1SV0deD7rb7yl49LwAAHkgwCwCwIcuy2Es3X5d/P5DKxa6D0dUQ19UtG8190q5iWRaHabevbJL8ooUBAMB6BLMAABtQ9/fc7+DQ76/3Ge05FbMPVAfvx7nRrqKjUPZ0UZT73vUAAOv51hAAAGzEYdpvYfCf8uXNoXplUZSrZVl0+RROhrzAFkU5u/7Py7I4SPuhbKKFAQDARqiYBQBYUx2QPe3g0P9lqt6iQ3La0XEvx/TV+2VZzJP82MGhf7neRgEAgIcTzAIArGFZFrN0E5BdeV6HdEOx6ui4RyNac/Mk7zo49HmG94sAAIDeEswCADzQsiy20o/A792yLHYHMmz7qQK+Nl1mQC0fvrLm5ukmlE2Seb0RGQAAGyCYBQB4uP2031f2cw7rDch6rQ725i0fdhSBYh2+dxXK/nR90zEAANb3zcePH40CAMA9LctiO8k/eva0LpNsDyGEXJbFfpKfWzjUh0VR7o5gve2kagPRxS8C3i+Kcu5dDwCwWSpmAQAe5rCHz+lxklXdYqHXFkW5n+Y3ArtM+9W5G9dxKHuakbSBAADoG8EsAMA91Rt+Pevp03uafobGt5mnCk+bcJkRtDDoOJT9/5LM9JUFAGiGYBYA4P76vjP998uyOOz7IC6K8iTJdpIPG37o4yQ7i6I8GvIiqyufV+muj/F/kWTL2x0AoBl6zAIA3MOyLObpbgOm+/phUZSHAxnX3VSVvuuEkJdJ9hdFeTCCdXYVyj7t+Kn8uihKrQwAABogmAUAuKM6LDtLdxWMD/HXoVSO1uN7mOT7B/z141StC85Gss5W6T6UTQa0oRwAwNAIZgEA7mhZFvtJfh7Y075M1Sf0ZEDjvJPk+p/b+vmeJjm5+rMoytVI1lifQtkrg6m8BgAYEsEsAMAdLMtiO8k/Bvr0B1/1WIe120kuxhLCfuZ1HuVhFcNNOl8U5bazAADAZglmAQDuoN5M6/mAX8JpqspZX0m3xh7iuzEH4gAAXXhkCAAAvmxZFrMMO5RNqq/GH5rN3q6xw56vMRuAAQBsmGAWAODr9kfyOr6vA0B6ZCDV2N/X7TwAANgQwSwAwBcsy2Ke2zefGqrn9WuiP+trKNXYqmYBADZIMAsA8BnLstjKeKplr3u3LItdM9z5+tpJ8m5AT3lu1gAANkcwCwDweXtJnoz0tR3WwSDdORvY832s2hoAYHMEswAAt6j7abb11e3/q4OX+DjJSjjbnUVRXiQ5H9jT1s4AAGBDBLMAALfbTxVeNu00yf+c5LKD1yic7d5qYM/36bIsZqYNAGB9glkAgBvqoLKtDZnmi6L835LMOnq5wtlunQzwOc9NGwDA+gSzAAB/dtDScX5dFOVJktT/+0NHr1c4250hBrPP61YfAACsQTALAHBNHU4+a+lwnwTAi6I8TPJLRy9dONuBRVGuBvrU52YPAGA9glkAgE+1tbnR+0VRnt38l4ui3E/yvqPXLpztxrH3CQDA9AhmAQBqy7LYSnu9ZQ8/9x8WRTlPtSlYF4Sz7Wu6ncF/amKdLMtibuoAAB5OMAsA8Id5S8c5vsNX2GcRzk5Fk8HsD0n+14YeW9UsAMAaBLMAAH9oK2j66uZii6K8SLKb5LKjsRDOtqepYPaHum9xU5vZPbU+AAAeTjALAJBkWRa7SZ60cKjzRVEe3eUH6x60swhnR21RlE0Es1eh7NXjnzf09GdmEADgYQSzAACVeUvH2b/PD9ehWpdfGRfOtmOTG4D9Hspe01TV7MzUAQA8jGAWAJi8ZVlsJ/m+hUNdJjm671+qQ7YfOhwi4WzzNlU1+/6WUDb5wmZza5qZOgCAhxHMAgC02Fu27h17b3XY9r7DMRLONmsTwez7RVHOP7N+LhpaP4+tCQCAhxHMAgC018bgcJ2/XIduHzocp6twdmbJbNy6wexnQ9lNrb8vsB4AAB5AMAsATNqyLOapAsemva8381rXPMlph0P2OMlv9bixIWtuAHaXUDaLolylmU3AZmYQAOD+BLMAwNS11sZgEw9SfyV9lqpfbZfeCWc37iGB+51C2WsOG3jeM1MHAHB/glkAYLLq3phPWzjU8ZoVkZ8Qzo7WfdfIfUPZpJlgVp9ZAIAHEMwCAFM2qGrZ6+qgdxbh7Jic3eNnHxLKpm6n0USf4pnpAwC4H8EsADBJy7LYSvK8hUOdL4ryqIkHFs6OzuqOP/egUPaawwae+8z0AQDcj2AWAJiqtqpl95t8cOHsqNyllcG6oWzqXxRsehOw700fAMD9CGYBgKmat3CMyyRHTR9EODsOde/gL83h2qHsNYebfv7LspiZRQCAuxPMAgCTsyyL3SRPWjjUQR22Na5n4ey+VfZgn6ua3WQom2hnAADQOcEsADBFuy0d57DNF9WjcPbnZVkc1X18uZ/bgtlNh7JXm4Btup3BzPQBANydYBYAmKJZC8d4X4dfrepROPt9ktWyLLYtt3u5uWZONx3KXnOy4cd7ZvoAAO5OMAsATEodFLbSxqCr19ijcPZpkpNlWexYeXd2PSw9TbO/RDhp4P01M4UAAHcjmAUApmbWwjGO63C0Mz0KZx8n+btNwe48b6v6/54mmTXco3g10PcXAMAoCGYBgKmZtXCMgz680B6Fs0m1Kdih5XcnH9J8KJs0UDEbwSwAwJ198/HjR6MAAEzGsiwuUlVxNiJtOhkAACAASURBVOV8UZTbPXvNO0mO0k4Lh685TrLbQujI3dbG2abXxaIovzGyAABfp2IWAJiMOqB83PBh9vv2uuvK2Z1UX4/v2rNUm4LpO9sP+swCAHREMAsATMms4ce/XBTlYR9feF2hOks/wtmnqcLZXUuyc9oZAAB0RDALAEzJrOHHP+jzi+9ZOPs4yb8uy2LPsuzUaoDvMwCAURDMAgBTMmv48Q/6PgA9C2eT5G82BevUiSEAAOiGYBYAmIQW+su+H8qGVj0MZ58vy+JkWRZbVmona+HcSAAAtE8wCwBMxazhx98f0mD0MJx9muTMpmCdUDULANABwSwAMBWzBh/7eFGUZ0MbkB6Gs49TbQo2t1xbtelgdtuQAgB8nWAWAJiKWYOPvT/UQelpOPtuWRYHlmxrNh3MPjGkAABfJ5gFAEav6f6yi6JcDXl8FkV5sSjKnSTve/S0flyWxZG+s63QygAAoAOCWQBgCmaG4OsWRTlP8lOPntL3qVobbJudRuf9LMmlkQAAaJdgFgCYglmDj306poFaFOVBkr+mP0Hd0yQny7LYs4wbpWoWAKBlglkAYAqa/Dr8xdgGa1GUR6nC7POePKXHSf62LAvVswOhBQUAwNcJZgGAKXhmCO5nUZQnSXbSr4rgZ1E925Sdnj8eAMDoCGYBALhVTzcFUz3b3LgCANAiwSwAAF/Uw03BEtWzAAAMnGAWAICv6uGmYInq2Y1YloW2AwAAHRDMAgBwJz3cFOyK6tn12KgLAKADglkAYNSWZTFr+BAnUxrPnm4Klqie7ZuZIQAA+DLBLADAei6m9oJ7uinYFdWz9zczBAAA7RPMAgDwIPWmYD/08KmpngUAoPcEswAAPNiiKA+TfJd+bQp2RfXs3egxCwDQAcEsAMB6ZlMfgEVRrupxOO3h01M9+3U7hgAAoH2CWQBg7GYNP/4zgd/vm4LNkhz39Cmqnm3XmSEAAPgywSwAwPr2DcHvm4LNkvza06eoevZ2TYzFyrACAHyZYBYAYH3PBX1/WBTlXqq+s+c9fYrPkvxjWRaHU5+3ZVnMkjzZ8MNeLoryzDsBAODLBLMAAJuxP9UXviyLrWVZ7C3L4vdNpOq+sztJ3vf4qT+PgPawgcdcOR0AAHydYBYAYDMmVzW7LIudZVkcJvm3JH9LclZXYCb5vbXBPMlfk1z2ee4ywYB2WRb72Xy1bCKYBQC4E8EsAMDm7I/9BdbVsfNlWZwk+XuqUPPK4yS/1YHf7xZFeZSqj+mHnr+8yQS09ev7uaGHXzkVAAB83TcfP340CgDAaNUVnL+1dLjLJNuLorwY4Thupwqed1MFsF9znGT35lgsy2Ke5OCOj9G190n2x9gvdVkWq1S9djf+HlgU5ZYzDwDA16mYBQBGre512pbHSfbGNH51dewqyT9SVZTeNVB9lhutDer5OEzVe/Z4AC9/lBW0dTj+rKGHXwUAgDtRMQsAjF79tfunLR1u8FWzdQi5l2SezVS2/rooyr1bjrOXqgr38UCGZvAVtPUGbWcNjvlPi6I8cNYBAPg6FbMAwBSsWjzW41SVooOrnF2Wxe6yLI5SVcf+mM2Fdz8uy+LkZtVpHeDtJDkdyBCNoYK26TYSJ043AAB3o2IWABi9+qvb7zo49GmSvZbbKdx3bLbyR3Xsk4YPd5lkXm8GdvN57Ke5zaiaMqgK2jb6LS+K8htnHACAuxHMAgCjV1c3/qPDp/A+VUB70aMxmaUKY593cPjPtTbYSXKY9tpObMqHVFXZR30Naev3wCrNhu/Hi6KcOeMAANyNYBYAmIRlWVyk216ml6mqKw86eO1bSWap2gbM0tzGT/dxmqp69uSW53uQqpXCEJ0nOUoV0q56sO53UlVEtxHA/7Ioyn1nGwCAuxHMAgCTsCyLVfoTSDba3qCuhr0KYXfSfIuCh/psWF2/hsMeP/e7vr6j/FFNe9Hiep+l2litzTX/XZ/bdgAA9I1gFgCYhB72MP2QaiOmJLm4rXL0jq9rO38EsDvpR/j8kLGY3wwu60rf/Qy3evam4/xRTXvW0Dqfp6qQbb0dhP6yAAD3I5gFACahjY2PNug0yVVIeZFPd7r/35P8T6lC2P8uyX89kin6j6kqif+Xz8zdfoYZOn/Oxloe1AH2PFUg21WFsf6yAAD3JJgFACahDq/+zUj03q+p2htc3DKH81QB7ZORvebLfBq+X1nd4e9uJ/kfk/xTx69hb1GUR5YvAMDdCWYBgMlYlsVJOviKN/d2ni8Efcuy2EsV0D42VL3w66Io9wwDAMD9PDIEAMCEqOgbhidJ/nVZFqu6h+4n6s3CtpP8kqralO6cCmUBAB5GxSwAMCnLsjjL+L4KP2aXSQ4WRbn/mfncTlU9+9xQdTI3s4duXAcAMHUqZgGAqZkbgkF5nGS77hH8J4uiPFsU5TzJvyQ5Nlyt2hPKAgA8nIpZAGBylmVxGBWWQ/A+1UZgZ/eY21mqCtpnhq9RHxZFuWsYAAAeTjALAExOXX15FptH9dW9A9lb5nieKqDVtmLzzpPsLIrywlAAADycYBYAmKQ6uHtnJHrjMslBqn6yFxuc571UAa0QfnP+ooUBAMD6BLMAwGQty2IVX3nvWiOB7I153kqyV/8R0K7nl89txAYAwP0IZgGAyVqWxXaSfxiJTjQeyH5mvveT7EZA+xDHi6KcGQYAgM0QzAIAk7Ysi/0kPxuJ1rQeyN4y51upwtm9JE9NyZ3nbVtfWQCAzRHMAgCTtyyLs9gkqmnnqQLZwz6Fe8uy2EkV0Kqi/bK/LoryyDAAAGyOYBYAmLxlWcyS/GYkGnGeZH9RlIc9XwNXVbT7EdLf9NOiKA8MAwDAZglmAQCSLMtinqqiU9XkZgwikP3MWpglmSd5PvE5PE4yXxTlmeUMALB5glkAgFq9OdRhkmdG48EGG8jesh62UgW0e5lWFe15kj2tCwAAmiWYBQC4YVkWe6m+0q569u5GE8h+Zk3MMo0q2l/S4cZsAABTIpgFALiF6tk7O04VyK4msi7GWkX7IVWV7JklDQDQDsEsAMAXqJ691YckR0lWUw7ylmWxk2R27c8Q18h5qj6yK8saAKBdglkAgK9QPZvLVEHskb6jX10ns2t/nvR8Tg8WRblv5gAAuiGYBQC4o4lVz56nCmMPF0V5YvYftF6280dIu5PkacdP6TjJSZJVkhNtCwAAuiWYBQC4h5FXzx7nj8rYM7O98bWzlU8rapsMak/zaQgrXAcA6BnBLADAAyzLYj/JzwN/GZepgrurMPbCzLa6hrZSVdKm/t+tGz+yXf+5bit/DnTP63k8SRXCrowuAED/CWYBAB6o3vxpP1V49nQgT/sqxNMvFgAAOiSYBQDYkGVZzFJVPl796UtYe5oqjNUvFgAAekIwCwDQoBbC2stUX2FPkrP6T1IFsUlypl8sAAD0j2AWAKBlN8La7dy+kdhx/b8X+SN4Pan/OfqIAgDAsAlmAQB6oO5Xe2YDLgAAmAbBLAAAAABAyx4ZAgAAAACAdglmAQAAAABa9q0hAAAAAACm6PWbt0epNtk9ePXyRav7PaiYBQAAAACmaivJz0nOXr95u//6zduttg4smAUAAAAApu5xWg5oBbMAAAAAAJXWAlrBLAAAAADAp64HtIev37zd3vQBBLMAAAAAALd7nOR5kn9sOqAVzAIAAAAAfN1GA1rBLAAAAADA3W0koBXMAgAAAADc3/WAdue+f1kwCwAAAADwcM+T/P31m7er12/ezu76lwSzAAAAAADre5bkt7sGtIJZAAAAAIDNuVNAK5gFAAAABuP1m7dbRgEYiC8GtIJZAAAAYEjOXr95uy+gBQbkKqA9e/3m7fzqX37z8eNHQwMAAAAMwus3b6+CjMskR0n2X718cWZkgAeeU1apgtM2nSeZqZgFAAAAhuhxqp3Q//H6zdvD12/ebhsSYCCeJNkWzAIAAABDJ6AFBkcwCwAAAIyFgBYYDMEsAAAAMDYCWqD3BLMAAADAWAlogd4SzAIAAABjJ6AFekcwCwAAAEyFgBboDcEsAAAAMDXXA9qZ4QC6IJgFAAAApup5kt9ev3m7EtACbRPMAgAAAFP3LAJaoGWCWQAAAICKgBZojWAWAAAA4FMCWqBxglkAAACA210FtDNDAWyaYBYAAAAAoGWCWQAAAACAlglmAQAAAABaJpgFAAAAAGiZYBYAAAAAoGWCWQAAAACAlglmAQAAAABaJpgFAAAAAGiZYBYAAAAAoGWCWQAAAACAlglmAQAAAABaJpgFAAAAAGiZYBYAAAAAoGWCWQAAAACAlglmAQAAAABaJpgFAAAAAGiZYBYAAAAAoGWCWQAAAACAln37kL/0+s3bnSRbhm9jLl69fHHSxyf2+s3bmekZ59zeMtdbSXZM2UadvHr54qKHc72dZNu8eK9M7Xza0dofzHWg5/cGrZxP3eN+3auXL1bWLX29x/E+bsTZq5cvzgzDaK7h3h8bvkdzfZnO9aUp3z5g0c2TvLNWNn6C/OHVyxeHPXtOh0mem53xze0tz3ErySrJUzO2Uaev37yd9enCUt+MrZI8nuqcJJl5rwzS8TpzV5sn+XmAz7tvfuvgmN/V770mz4/uce82Tu9fvXwxH9hzdk87gXsc7+PGXNZzfWIoBn/+9v741A9J1v2lv+vLRK4vTXrkjdwb7+rxdQNrbtuea0FTc54mWdVj3Ie5nnooe5lkd82L/IH3CviwOnHP6/vEocyte9oJ3OPUc73rfdyIx/Vc+7aQ69yYrF085foynetL0775+PGjN/LIThAbOGnvJfmbqRjf3N4y10LZdpwm6fS3fkLZXNZzcLLGGLr56tbxq5cvZmu+D/bTQcXsus+7hx/uPnZw2O+a+gq9e9wH+/XVyxd7PV+rztsTuMdxnzOce6mvzOFB7tcqaruDMfg/k/y/TR6giXsG17nNfy53fRnf9eX1m7erJM+6uMf91hu5d969fvM2XQV49VwLZUc4t7fMtVC2PU+THKWjrzPXc30YoaxQFnCPuzk/vn7z9qSv7Zqct1u9x1l1+bVToWxrHl+b6ybC2Z10E4rcx5OGH/+961zjhLKuL73zyBu5lzr56ru5bm1uZz34sCKUbd+zLr76aa6FsoD7nrHdszpv9/bD81YHcy2UbdfjJIdT+opxy/Zd5xollHV96aVHX1l0M2/kadzoOmm36qjLHk2Cuk612pfPXAtlAfc9Y7tndd724fnaXAtlJzLXE/H+1csXZ65zjRHKOuf01qOvXOiOrIHx3+g6abeuswb6grpeaCWcNddJhLKA+55R3bM6b/vwfOOz6ipC2dHP9YTsu8414jLJX4Wyzjl99siFbto3uqqiO9N6OCuo65VGw1lznaT6rbhQFvBhdST3rM7bPjz7rDq9uZ6QXzdVLes694mrb88drTmmri/OOY165EI33RtdVdGday2cFdT1UpPh7FGEsodrvF/cfMEI+bA63HtW520fnn1Wnd5cT8hlNlQt6zr3p3Fde6M61xfnnDY8cqGb5o2uue6Nq3B2u8EPK0LZ/tp4OFs/3rMJj+m6oeyBmy8YHx9Wh3vP6kOzD88+v0xvrifmYBM7zrvOfUIo65wzKI9c6KZ3o2uue+dxqg3BmqgqEMr238bCWTcPa4ey8yQ/WpIwLj6sDvee1XXPh2efX6Y31xNzmeTAdW7jYyqUdc4ZlEcudNO60TXX0zmxCGUHZe1w1s3DRkJZN7QwMt7bw71ndd1zj+vzi88zE7B2tazr3CeEstM75xyM4YU8cqGbzo1u/XV5cz2dm5mp9xkdmgeHs24e8l4oC3hvj+ee1XXPPe61ufZZddqfZ8Zs7WpZ17k/jadQ1mfoQXrkQjfcG90H/J0Dcz2Im5m9DXxg2cu0+4wO+cKyd8+5nkUou+6Hfje04F6JBuehgXDWh+bp3OP6/DLMuT40DF9f2+tUy9a/tHCdq2wqlJ3656rJfIbum0cudJPiN5fmGnM3JpsIZQFoXqsbggHuZ3tuE71ljfEfY7l2KItzTpcemT8ABkgoCzAswlmAytq9ZUkilGUkBLMADI1QFmCYhLPA1G2iWhahLCMimAVgSE6FsgCDJpwFpky17PqEsoyKYBaAoThNMjMMAIMnnAWmSLXsZsZQKMuoCGYBGILT+iZMhQHAOAhngalRLbseoSyjJJgFoO+EsgDjJJwFpkK17PrjJ5RllASzAPSZUBZg3ISzwBSoln04oSyjJpgFoO83YW5iAcZNOAuM/Z5Wtex6nweEsoyWYBaAPt+ECWUBpkE4C4yVatn1Pg8IZRk1wSwAbsIA6APhLDDG+1rVsj4PwGcJZgFwEwZAXwhngTFRLevzAHyRYBYAN2EA9IlwFhjLva1qWZ8H4IsEswC4CQOgb4SzwNCplvV5AL7qW0MAQA/sTegm7DTJGG7S/ynJP7d4vP/sbQKT8+71m7d59fLFoaEABka17P3HSyjLJHUVzP6UZExvuJ0kf7OcRjvP8yTPWzze1kDH6TTJ3sjW8EGSpy0fc2uC83wxsZuwvVcvX6yG/iJev3k7S/Jbi4c8c1nFvc8k9eUXWd+5x5nMPe7Y3sdtf5ZJkn/n1DXaatn3SQ6buM979fLFVO/1XF+mc325VVfB7MkYPpRe+3DqsjPiea7Dhyl+ALn38x7T+7qe+y7m4sI8A7j3oV/c40zqHndsn1VnHRz2/574KWPM1bJnrnOuL64vm6WVAQAAANCZVy9fzO7z86/fvP3YwdP8TigJbJrNvwAAAAAAWiaYBQAAAABomWAWAAAAAKBlglkAAAAAgJYJZgEAAAAAWiaYBQAAAABomWAWAAAAAKBlglkAAAAAgJYJZgEAAAAAWiaYBQAAAABomWAWAAAAAKBlglkAAAAAgJYJZgEAAAAAWiaYBQAAAABo2bcdHXfn9Zu3YxrHHUsJsvX6zdvZ2F7TRI4JAAAAtKyrYPZvhh5G52mS3wzD2i4MAQAAAIyfVgYAAAAAAC0TzAIAAAAAtEwwCwAAAADQMsEsAAAAAEDLBLMAAAAAAC0TzAIAAAAAtEwwCwAAAADQMsEsAAAAAEDLBLMAAAAAAC0TzAIAAAAAtEwwCwAAAADQMsEsAAAAAEDLBLMAAAAAAC0TzAIAAAAAtEwwCwAAAADQMsEsAAAAAEDLBLMAAAAAAC0TzAIAAAAAtEwwCwAAAADQMsEsAAAAAEDLBLMAAAAAAC371hAAQKsOXr95ezGC1/FPSc5bPN5/Hug47bx+83Y1sjV83sEx/yunDgAAxkYwCwDtemoIHuRsoM/7cZJnpm9t/48hAABgbLQyAAAAAABomWAWAAAAAKBlglkAAAAAgJYJZgEAAAAAWiaYBQAAAABo2bcdHfe7Vy9frAw/jMrxq5cvZoYBAAAA4OtUzAIAAAAAtEwwCwAAAADQMsEsAAAAAEDLBLMAAAAAAC0TzAIAAAAAtEwwCwAAAADQMsEsAAAAAEDLBLMAAAAAAC0TzAIwdT8Ygsk4SHJqGAAAgD4QzAIwaa9evjiMcHYqc32RZBbhLAAA0AOCWQAmTzg7qbkWzgIAAL0gmAWACGcnNtfCWQAAoHOCWQCoCWcnNdfCWQAAoFOCWQC4pg5n3xuJScy1cBYAAOiMYBYAbnj18sU8wtmpzLVwFgAA6IRgFgBuIZyd1FwLZwEAgNZ929Fxd16/eWv0N//BcmUU6NDW6zdvZ4Zh485evXxxZhg6O6/O6+vVc6Mx+rm+qM9hqyRPjQjucXvj4tXLFyddP4kR3uNsTeSYAL3m+uL60lUw+zdvv42zWQ1de5rkN8OwUaepqvjokHB2UnMtnMU9bj/vcU968Dzc46zvwhAwcAev37xtax3PFWdMhuvLxK8v35q/cdyw1pvVAONxmmRWf8WajglnJzXXwllwjwtwm7buC34QysJ06DHrhhXoH6FsD+k5O6m51nMW3OMCOPcBjRPMDtsvTtowOkLZHhPOTmquhbPQHcEE4NwHTIJWBsP1/tXLF/uGAUZFKDsAdTg7n/o41F/3/23kc32RZMeq/9PcfzQKNEgwATj3AZOhYnaY3tfBADAeQlkApk4wATj3AZMimB0eoSyMj1AWgKkTTADOfcDkCGaHRSgL4yOUBWDqBBOAcx8wSYLZ4RDKwvgIZQGYOsEE4NwHTJZgdhiEsjA+QlkApk4wATj3AZMmmO0/oSyMj1AWgKkTTADOfcDkCWb7TSgL43OZZFcoC8CECSaAdZ079wFjIJjtL6EsjM9lqkrZM0MBwEQJJoBNGNr9tHMfcCvBbD8JZWF8rkLZE0MBwEQJJgDnPoBrBLP9I5SF8RHKAjB1ggnAuQ/ghkepAgP6QSgL4yOUBWDqBBOAcx99Zw8QOvEoySzC2T4QyrJJB0lODUPnhLIAHX4gNgT9mIcGgglzOzyn9f0pOPfRS/VnNtcX15fWPaoX3yzC2S4JZdn0ReWifl8LZ7sjlAXo9lp46ANW5xoJJsztID80z+r7U3Duw70Dri/XPKoXn3C2O0JZmrqoCGe7I5QF8AFr6hoNJsytD80wxXMf7h0Y3/Xl0bXFJ5xtn1CWpi8qwtn2CWUBfMCaulaCCXPrQzNM8dxHa/cOvxoJ15c2PLqx+ISz7RHK0tZFRTjbHqEsQH8/YAnw2tFqMGFufWiGKZ77aOX6spfkvZFwfWnat7csvpPXb97Ok/yr+W6MUJa2LyoXr9+8nSVZJXlqRBohlB2I+hq3bSTWtj2AuZ6l+sUU5NXLF4ev37xNkndGozGdBBPm1odmmOK5j1auL/P6+vLcaLi+NOXbzyy+o9dv3v7g5qYRQlm6uqgIZ5sjlB2Wk1Q7dz42FJOZa+c8rq6FArzmdBpMmFsfmmGK5z5aub4IZ11fGvXoSzc38bWgTRPK0vVFRVuDzRPKDu99oG2Pcx7TXhfucTevF8FE/Rx87dSHZpjUuY9Wri9z1xfXl6Y8cuPaGqEsfbmoCCo2Ryg73PeBcNY5j2mvC/e4m/NLn4IJH559aIaWCGWnd+/g+uL60ohHblxbIZSlbxcVQcX6hLLDfx8IZ53zmPa6cI+7mXvcfR+efWiOUJZpEcpO997B9cX1ZeMe3XHxuXFd74Z1bhjo4UVFUPFwQtnxvA+Es855THtduMcd6T2uD88+NENDhLLuHVxfXF826tE9Fp8b15HdsIKg4kGEsuN7HwhnnfOY9rpwjzvSe1wfnn1ohg0TyuL64vqycY/uufjcuI7shhUEFfcilB3v++AkyZ6RcM5jsuvCPe5I73F9ePahGTZEKIvri+tLI759yI3r6zdvT5JsWS9fHKdVD5/WXsvzNpbw6jBJm/N51sF6vXj95u0syY5375fn5tXLF2c9e04nSb5r8XijvUDW17ckeWepj/4afXXOWyV5akRwjzv4e9yvfnh+/ebtodnb7P1HSx+a9zp4T47tF/Btf5Zp636xzbVx0cPCjLY/A3T2WdX1xfWlJV1cb5Lk5JuPHz+adgCovX7zdh7hbB8dv3r5Yrbhud6KcHYovhtiIAgAAF/yyBAAwB98pXlSc33V1uDYaAAAAG0TzALADcLZSc31RV2Jq0cYAADQKsEsANxCODu5+Z5HOAsAALRIMAsAnyGcndx8zyOcBQAAWiKYBYAvEM5Obr7nEc4CAAAtEMwCwFcIZyc33/MIZwEAgIYJZgHgDupwVljXnZOW53tuvnvjMsmZYQAAYGwEswBwR8K6zrx/9fLFnvmepMsks1cvX5wZCgAAxkYwCwD3IKxr3ft6zM339FyFsieGAgCAMfrm48ePRgEA7un1m7eHSZ4biUadvnr5Ysd8T5JQFgCA0VMxCwAPoJKycadJZuZ7koSyAABMgmAWAB5IWNeY01TB3IX5nhyhLAAAkyGYBYA1COs2rpehrPluhVAWAIBJEcwCwJqEdRvT61DWfDdKKAsAwOQIZgFgA4R1axtEKGu+GyGUBQBgkgSzALA5e6kCRu5nUKHsFeHsRghlAQCYLMEsAGxIHSzOIpy9j0GGstfmfB7h7EMJZQEAmDTBLABskHD2XgYdyl6b83mEs/cllAUAYPIEswCwYcLZO7lMMh96KHttzucRzt5n7oWyAABM3jcfP340CgDQgNdv3m6l6jvLnx2NMZh7/ebtXpIt0zu9uQcAgPsSzAIAAAAAtEwrAwAAAACAlglmAQAAAABaJpgFAAAAAGiZYBYAAAAAoGWCWQAAAACAlglmAQAAAABaJpgFAAAAAGiZYBYAAAAAoGWCWQAAAACAlglmAQAAAABaJpgFAAAAAGiZYBYAAAAAoGWCWQAAAACAlglmAQDg/2/v7pITOdKFAb8+4XvpW4E4KxCzAuEVNF5B4xWYueGGCBoTwQ03xiswvYKRV2B6BSOtYNAKjrSC/i5IzWjaFFC/FOJ5IjrGI4ki863KLPKtJBMAABomMQsAAAAA0DCJWQAAAACAhknMAgAAAAA0TGIWAAAAAKBhErMAAAAAAA2TmAUAAAAAaJjELAAAAABAwyRmAQAAAAAaJjELAAAAANAwiVkAAAAAgIZJzAIAAAAANExiFgAAAACgYRKzAAAAAAANk5gFAAAAAGiYxCwAAAAAQMMkZgEAAAAAGiYxCwAAAADQMIlZAAAAAICGScwCAAAAADRMYhYAAAAAoGESswAAAAAADZOYBQAAAABomMQsAAAAAEDDJGYBAAAAABomMQsAAAAA0DCJWQAAAACAhknMAgAAAAA0TGIWAAAAAKBhErMAAAAAAA2TmAUAAAAAaJjELAAAAABAwyRmAQAAAAAaJjELAAAAANAwiVkAAAAAgIZJzAIAAAAANExiFgAAAACgYRKzAAAAAAANk5gFAAAAAGiYxCwAAAAAQMMkZgEAAAAAGva9EAAAQD6j8awbEf2I6EXEOiLuF/PJg8gAAHCs775+/SoKAABwhNF4dh0R04j4ecevP0fEcDGfPIsUdDHtbwAAGfNJREFUAACHSMwCAMARUlJ2HRG3e/7sMSJ6krMAABxijVkAADjOKvYnZSP9/l6oAAA4RGIWAAAOGI1n04j4cOSf36W/BwCATJYyAACAPdJGX/8s8NK/2RAMAIAsZswCAMB+y4KvWwkdAABZJGYBACDDaDzrR8RdwZffjsazgSgCALCLxCwAAGRblnz9VAgBANhFYhYAAHZIs11vSh7mxqxZAAB2kZgFAIDdhhUdZyqUAAB8S2IWAAC+MRrPehFxW9HhzJoFAOAvJGYBAOCvhhUfbyCkAAC89d3Xr19FAQAAktF41omIf9Vw6L8t5pMHEQYAIMKMWQAA+Fa/puMOhBYAgFcSswAA8N+GNR13ILQAALySmAUAgGQ0nnUj4qamw1+NxrO+KAMAECExCwAAbw3O/PgAAJwJiVkAAPiPume0fhiNZ9fCDACAxCwAAETtyxi8ZTkDAAAkZgEAIBk09D4SswAASMwCAEDSVML0g1ADACAxCwDAxRuNZ51oZhmD1/czaxYA4MJ9LwQA8L6NxrNlRHS//fliPukd8dpuRCx3/Gq1mE9WFxbHbkRMI2Kd6v9c8/tdx3YGZz8i7i8t3ifQP8H73Qs7AMDlkpgFgPevGxF3BV97nfHa9QXG8Tq2X0H/EBHT0Xg2rCtZmpLA64i4Sj96cBnXrunEbE/IAQAum6UMAADyu4qI3+v4OvqOpCzNuGv4/W7SuQYA4EJJzAIAFLes6ZiSsg064XqvPdEHALhcErMAAMXdjMazXlUHSxtQ3Qlr43oX9r4AALSAxCwAQDm9Co/VEc6zP4d5fBB6AIDLJTELAMDFGo1n1xFxe8L37zkLAACXSWIWAIBL1rvw9wcA4EQkZgEAuGS9C39/AABORGIWAIBL1jvx+3edAgCAyyQxCwDAJbs98ftfjcYzyVkAgAv0vRAAtNtoPOvEdkZXJ7Yzq64z/vQhIp4j4mExn9zXUI7+m/ffmURYzCe9A8e4TnV5ff2+v9+kfxER68V8sq64Pr30/pn1eY1nKsd6MZ9sKi5DNyL6R8RincqyXswnD2d+PeeJ+3NE3NcU99cy7Iv7axk26b/b1BfEkWUv1HZG49mu1zws5pNhyTosd533Q31HzddjG/ROcY2lPrl74N5yyH2ZfmnHfeGQyu8HO/qFb+9FD4fqmK6lXXF8SGV+ruHcnTRuR5Zhs5hPVkf0bd3IN3v8IZ2XTc4yT4uU8YjjDlLfvCp7z8p5bt/FZwOASyYxC9BSaZA3jYi7I19y9+a1LxGxjIhlmcFgGhwM07+rBusS3/ztp1Sn+4iYFh30FKzPhzev/5Lef13y3A5SPG4KnNunVIbVGV3Lr3Ef5Kjza9x/bUPck5cThnEYEZ8KtJ9P6ZpZ5ewP7mqqR7fGYxfRa0k5ug23yUG6pqqYLfxpNJ79ERGDPPeblAgdRsTHAu9XyT0uT7+wqx2lhOL0mDqkGC0r6MeOfs+MuN1HxLDkZ4NeOncfjvjzLylutVyHo/HsMcX12HvipzxlzGGQ+rZPo/Hst3TPeq4xrgevTwDOg6UMAFoozSr7s0QC4yoNPjZppmuRMvRjO1PoU5RLyq5K1uVtnT5GxEMazBUZSD6UrM9dRPw5Gs9WKdmYtwzd0Xj2EBG/x/HJwW/dRMTvo/FsXaQMJ7iWu2/iflMy7vcF496pIO5Rph1UoMx736T4P/jK/F+0JR69ptrjm7ZQ5RIOH2I7sz/PPe6fkT+5uOse16sgFjc52tFmNJ710szLf+Wow4fUjy2L9t2j8WyY8z2z7qObIvfRbz6ffChxHXYqvA5v0z3xoUX3xJ9jmwBvMq5v+/leAHA2JGYBWmQ0nl2nwcrPFR3yKiL+kXcAlv7+H1EyEZWSsh8rDtNVGoQNctbnzyiXlHvrY0TkSoymhNg6qkuG3KXBdbfF1/MgtsmXquL+oWDcH+L064i2wU1E/LNoQuadakv7uak7qZRmWq5rbAu3h66tdI9bV3yP+7PAPa5Mf3yV7iefCpb557z92Jv76a8V30eXTX8+SddhHX3ybbontiU5e3fMdVnD576bIm0CgNORmAVol1VNg+bfj505mz7M/15BEmAa1Sdl31qmAd6hcvSqqE/GIHCdYyC6jupnXF5FxH0bZ86mxMeyrrgfU+ca437ulmbO/nuJjZsWFanuc7JqoC0cWoN4GfUsZZHnHtdtQb9w9P0jlXlZ0/305zQL9xj3FX0+ua8x9leRc6ZqzQbn8LkPgNOSmAVoT5Kg0LpieQblhxKZ6ffLCupyfcQAvYoB2PSIcqzqHFxnbCTS5ED0puY6Fj3/ddb59tC5fzPglZTd3Xbuz2EpjJq1LTndq7FNdqKZtX1vD9zj6nxYtzrmYV2L+oXbY2aspoeLP9dYjl8PPahJ97m7Cq7DQdT/7YW7Fn2V/64Fn/suvZ8HaD2bfwG0QPrgPM349UsaSB4zC6QT/9mA4luviczBntdP9wxY85SjX9Fx9tUnIuLjaDzbt4nJMLJnxL1u9rE5sj6DjDoNR+NZ5i7MBwaiT7FNhB+zm3J3T30+jMazXh07lRe0L+6Pqc5l4/7zaDxb7ol7b891U1XcTyFv+5lmlP0m1Wt6wV1vr2XlqTNRvG/m3OumQQ+x3eG96XtcRMTn2M4g3RwRo6w+9eA9LiUYbw+U4/5NHPK2/z/S6zdHvn5vP5ascrzfvrj19/SJy6z2cMSD1kP96fM394Yq+rZ994bX91m3ufM5sk3cH9Em911jV+ncDHzSBmgviVmAdshKZL5ERG8xnzzkONZqz3IEmYnMNEjIms30mMrxnKM+0UB9Ig0m7/cMznYOeBbzSZ6ByjrNbNr1Vc6rNOiZNlCGVWSvizho0UB0UGGdp3vqPNwT3+meREae3eNf434fzcw43CdvO3xtP6uMtj2Iy07Mtm3GbKfGY19X1CbL9AlV3OPWsV2KYxi711s99LBusOfe1N/xcOv1/Vaxf7bvoddnlfe1r9pZrvRV9Kyk7g85Hsa9liPrXno3Gs+6GedhGNkJ0KOvn/QZ47aivu3QveHDGfQ/VbeJrGv0UJsA4MQsZQDQng/ouwxzJjEjImIxn6xim4DapZ/z5y+RPxnUa7A+3YxBYC9j0POlSCIizWga5old+lrtrkHjUxRY6iGdg7znr1HpK7G7EglPBeP+vKd99PckAO4yruVB3gHqm7i/nLqfKDK4TnF/2vGrmwtfa7bTsvKcYoO6VUPv06/4nrDMe49L94SsJOfebxykNvRlT5GWB16/jIhfCvTdWb/7pcg3JNK99HNFnw3yJvW7FX7GeO2Xe1n9couWM8j7ua9fsE3su0atNQvQYhKzAO2wM4mUBlFVD7izBkdZg5hpgWTQVYP16eX8eeEypIHw445f3eaM9X3R2SspQbwrIXHVkoFo1gBwWSLuDxlxz9rJPivuqxJxf47TbirzWGSwfkT8L3nAftu2Ap2gDS+PXJf1nO5xee8Jn49sW6sC7ettHzKN3Q9IrvY8IOlV3Z9G9iz5Xs52kvfhYtP9cifabedD25JLEi1zxh6AFpCYBWivh5KvX+f8gJ41iLlveX0iZ302ddQjI6HSraguVcfyvV/PvZrKsDlh/C7xmqlNi2cKd2o6bta1exsR/xqNZ6vReNavY6OgPYnfUtfkYj7Jm5DLTAyWbIOPORKLWWXOivtNyffbFbfNsfHZ86DgS4EyXNfUNz003Jbq7H+a/twHQAtYYxbgnVrMJ8+j8ayK42zOtD6djOOsSxalinj0SyaGemd4SQ5KzgasYmBZ9tytI+LTieJnfcBqdS6sXPexnU2XtVbox/QvRuPZS2wTRJs3bea133wokJDLqlMnrRPalFKJwcV8ssm4Bz1X0I67cfzDlyr6gsfYvV56nr6wKmX75XN86FRLkrqqz30ANEtiFgCa91Gd4aS6l1SulLCZRvYGVG9dxXbpgbfLD/z7gcRoPHuKbQLpPkosyxLb2aCfTh3wlmyKdN3w+3nQAwAtYSkDAAAuzaUtZfC6AdXnCg51E9td73+PiP9LyyB0XFIAAPlJzAIAcGmuW1quWjckSzu3/z0ydrIv6GNs16mduqwAAPKRmAUA4NLctbVgdWzA9VaaOduNiN+i2gTtp9F4tnJpAQAcT2IWAADao/ZlFhbzyWYxnwwX88l1RPwQEb9ExJcon6j9OBrPBk4hAMBxbP4FwEUZjWedxXyyOXEx/h717CTd5t2p30Odry+8+XTfQwxH41lPT/gfi/lkHRHrb2LUfXOueum/u+nf1YFDTiNidcRbP0bEsIYq2dhKX3YKHSEAoAiJWYB36r1txlJhfToRsSnx+l7Gz3MdMyVDLslDg3Xe7Dl3ZcqQlZhsIjncdHt+jL+ud3o1Gs+ui+5in76ifxsc08ectH9YzCdvr+n1N+exGxH92CZVdyVpb0bjWffNMbLax/MF9oNt6Qtu31F9ehWUodRDp9S33ez41VOTdbEJH8B5spQBQHvdlVxrMOsD/vqd1WeT8zj9OgZwGbNw13UMAltuU1PcqyhD2bj3K7oGM+1JVPUaLnvWz8vMcBy25BrtuL2UukYfFvPJNMXx8VCMUyL/5cL6warsiu9NmQRcSqyfwnNNfVveB2a7YnpVcgmOQUX3hrLnpm2f+wA4gsQsQLtNCw68rve8tokP6I8N1ifvwGdQNEGcdh3fNUPsj11/vyfJ9vGEg+O6rffEvdNEAVLcdyWCPhT9Gnt63a5ZZk/fzC6swpcdP7sZjWfDgmXv7EkcZJ2v+4yfD4tcu+k1ErPvSEq4Zl0n3SOus6ui1/QFyWqfZeI2PVFdHvbcDwu1ydSvfMj52SArptMinw1SGaY5+9EsZdvENGfsAWgBiVmAdvt5NJ7lGiykAc46Mr5W19BXR9cN1afQwCci1nkTdGmw9KlAGT5nxeg9rnWZZg5/qSruJWSdk/vReNbPee77+45XQ9lXGT//Ne+gPcX7PnY/UPiyZ73l+9id3H49j4Oc8VvH4bVJ2TqL9T9zJvzvq7qmL8xq3720wDlbRXYis+57w77PHvd5H/ikv8865sueB2ZZMb1JfVs3Rxl6B/q2IveHX/PO3h2NZ9ej8ew+43PSy2I+udeUANrLGrMA7fcptrPUHmL/bNfr2H6Nbd/acdOGynwfET83UJ+isxVvI+LP0Xj2mMqwb83MbirH1Z4yrA7E/OOOn1+lMjylMmyqGMS3YGOz1zr/mTHwfY37Q8113hf3fxwZ904691kPBV4iYllDAmOVki43GYP2aSr7w4Gyd4v2B4v55Hk0ni1j98OIq4j4/U05NgXjd86+pH7j7TnopX6r7PqdnToKfCCRmlcvIu72/P455zU9TPeNKjbu2hzok8/GYj55GI1nXzJi/Skl8I6JWye2y5mc+uHIH7E7MXwbEf8cjWd/xHGzOw9df/cFY5qnHIfK8LnE/fj31CbWFZzbZQDQahKzAOfhKg0A7sokEpoarC7mk/WegU9V9aliwHEb5ZMogwOx2IzGs18ie7btTexOIBaxjuOTnU8l32tz4Px/3lOvKuK+t84NxX1aYyJ8ELuT26/t50OUm/n2+YjZ88tUjpsGrt22e4ztTLv1oYdB6RsBvdgmS4okw+r62nFnT3uoUtYDs33X9E1kP8zLfa+L7FmR52gYEf9sIG5NWB7ot8r2a69WJWJaRTleovyD8Cruk49pPWgAWsxSBgCX4SWKbb70R8nBZJ0eF/PJqWeC/HTM0hBpYPSlgfLkSeisS77X+ojz/1j3db0v/inun2t67891Xn+pXr/U1XaOaZ9pDdF+7F7S4Jxtjvy7p3QO/ncxn3QX88nymBn6i/nkeTGf3C/mk8FiPrmOiB9L9qXnZnqCa7poP1iFWr8mnq65n1p2jh8K1mXdQFv47dB9uYGYDlrw7ZWXqG6GPAA1kpgFeP8eI6Kbkix5FU481TzweYzyOzmX9VPOGcj9mgekn3Oe42mJ9/rj0KAzlaUX9SZnl0dch4OoPjn7OR23Vimx/EsdbefYayW14168r+Ts+tD1HRE/LuaTzmI+2TsrOq3tONy3bnZK0vYj4n8j4rcjYnnOG/V83tcvpmv6t5rL0OQDu5eoOTGb4raK9iRnn0quWTqo8b7weOy9rcaY/tSCNV1fUj9v0y+AMyAxC/C+/ZY+nG8KvPbvZTcKSwOfv0X5r83/18A/ciSW6hiURsQPeZeFSLPo+hHx96g+yXXUDMhvBo6bEu81yFHnbtQzS+7LsV/RTEnUKuL+EtuE3aCpiy3V8YeK2tAvaebnc84yPMT2a/DvYtZnuvZ/29GuX2fH9nMkVgYR8WscNwN5s5hPhimWP2Wc06cz3qjnl2PaRorBj1FPsv+nhmcqDpt6v3TPqaovKNMH9kvW4/WhXdUJ+t/yfjaoOKaPEfG3Fqxv/CW2D+MlZQHOhDVmAdrrKbYzp3qRb43Cp9jO4FkWHDA+pcFmJcmB16RO2pl9UKA+rwOedYk6/WXwFvnXbvsjIu7LDroW88ky7Yw9SP/KrCH3uvnU8sjB6GM6t+uC7/c5vT5vYm/6ps79Kuqcd928knF/XV90dYoHAul8ddJGP/3It/bhY+oPSm0M97qsQdqF/LUcefuldbRkM7DFfDJMm5t1YrtZVNHYdNL/9nLGchURq7QDfP+1HHF+a6MWur4W88l92oxsGPvXMT7JfauF77erLxgW7EsfY7tJXd6Yf0l1fqigHs+x3QR0lepRdGOy1xnLhdf7riCmj+metKqoPV0XbA9/pHKsA4Cz8t3Xr19FAeDERuPZrs74y2I+6aXfX8d2h/VDHoomjlKC4LmJ2T856vNcdBA4Gs/WsWNzscV88t03db6uqww5ytorMaCs9dy+nquqB3sF61zpuTimDG0d5B5z7dZd9pRY6+SJ4Wg8e4gdiY+37fLM+u7XfuZpMZ90Wl7WTpRfc/Ih0i7xVV5fb66lY/rk/+oT0n1vfcR7DHZdr3ke8ozGs+Gx77enz9nV76yLHPNN3Pa1xed03v59zkbj2SZ2JP++bYfp+L1U54eG+pNDnw9er8FNHZ9XjozpJv0r9JkrXQe7NsL7JT3IfBuD3qFYSMYCnDeJWYB2DJj3JmYpFNN1HEjMAo22yeuI+L8dv2p9UvPIvvv/nXCJFbjYdniG56AXexKzIgRwWawxCwBAEwYZP9+cY2XSzLq3uk4xZ6D/ntohAJw7iVkAAGqVll6YZvz6XDe76h74/9C2dngd23XJd1mLEAA0T2IWAIDapK/triN7cx+JWai/HXYPtMOVKAFA874XAgAAsqRZdv04YqOvHfqxf5fzz01sOFiTbxOxHVcLNbfFXoGXdWK7gdTHPX/z5YzbIQCcNYlZgPZ6EALglEbj2TQiPtV0+JeIGJ5xeL5NzN65YqipHQ5juxTIVU3tcCDKAHAaljIAaC+J2eo9CgEcZzSeraK+pGxERH8xnzyfcYhudsTMcgbU0Q5/jXqSshERQ7NlW8N5ALhAErMA7fS0mE9WwlC5pRDAYekr0x9rOvxLRPy4mE/WZx6fXTquHiq8zvo1tsOIiJ981miNlzjf9bYBKEFiFqCdH877wlC5zwagcLS6lhj4EhHdxXxy7gmIbs6fQxHTmo77FBE/uCe2yuDMv0EAQEHWmAVoly+x/VqhZQyq8xIRy8V8MhUKOFqv4uP9kdrh+pyDkpYqGET2w7OeS4cK3VZ8vKeIWKW2KAnYDk+xTcquhQLgMknMArTDDxGxsc5bpYYRcW2wA4VUNWv/+b08aDpyI7TOaDxbxl9nzm4i4v4dzBSmWb9UdJxNRDx46Nsam3RuH/QJAHz39etXUQAAgAxprc9/VHCop9h+K0IyBgAAa8wCAMABg4qOcxMR/xiNZyshBQDAjFkAAIiI0XjWi+0yDt2IuEs/fozq1/qM2G5IOBB1AIDLJTELAMBFS5t6LeM/ydim/GhZAwCAyyUxCwDAuzIazwaxXX7gbaL1KSLWETF9u9Fi+ttlRFydoKgvEdGJiOvYztLtxnZjoI2NCwEA3j+JWQAA3oU08/U+tmu57vPbYj4ZVripVxlPGeV9iYjlYj6ZOrMAAO+TxCwAAGcvJWXXcfzM18+xXU/2quVVe4yI3mI+eXaWAQDeF4lZAADO2mg8u47tEgBX77SKj6l+vfS/97GdTStZCwBwxv5HCAAAOHPDeL9J2YiI24j4kOp4GxGfImKdEtIAAJyp74UAAIA2SmvA9mO7KdbtN79+jIiH2M4eHV5geG5ju2nZwJUCAHCeJGYBAGiV0Xg2iIhp7N/E6zb9+3jBoeq7WgAAzpfELAAArTAazzoRsYqIO9E4ypUQAACcL2vMAgBwcqPxrBvbpQkkZfPFbSAKAADn6buvX7+KAgAAJ5OSsuswA7Sox4joLeaTZ6EAADgfErMAAJzMaDy7ju1M2RvRKEVyFgDgzFjKAACAU5qGpGwVbiNiuOsXo/Gsm2YlAwDQImbMAgBwEmmzr3+JRGVeIqIbEf307y7jb9bp38oMWwCA05GYBQCgdmnJgkFEXEfEc0Tcx3aG58+ic1KfI2K6mE82QgEA0CyJWQAAajUazwYRsYy/bu71Ejb8aoOXiBgu5pOVUAAANEdiFgCA2ozGs15E/CkSZ+HzYj4ZjMazfmyXROhFxCa2m7Pdm1ULAFAtiVkAAGozGs/uI+KDSJyNfbOYP8d2Zq11aQEAKvA/QgAAQI0kZc/LvqUlPkbEOq0XDABASd8LAQAAVUqJu2FsN/vifbmN7cZtPaEAACjHUgYAAFRmNJ51Y5u4uxGNd+2HxXyyFgYAgOIsZQAAQCVG41knItYhKXsJBkIAAFCOxCwAAFVZxf41Snk/OkIAAFCONWYBAKjKOv3j/dsIAQBAOf8f1wnVURdcoQMAAAAASUVORK5CYII=" alt="Energycontrol — propelled by Semgroup" style="display:block;width:280px;max-width:100%;height:auto;margin-bottom:12px"><small style="color:var(--muted)">Evaluación de colaborador</small></div>
     <h2 id="pubEvalTitle">Evaluación de colaborador</h2>
     <p class="intro" id="pubEvalIntro">Cargando información...</p>
     <div id="pubEvalForm" class="hidden">
@@ -369,8 +475,9 @@
         <div class="field-lite"><label>Desempeño</label><select id="pubPerformance"><option value="">Selecciona...</option><option>Excelente</option><option>Muy bueno</option><option>Bueno</option><option>Regular</option><option>No satisfactorio</option></select></div>
         <div class="field-lite span-3"><label>Comentarios</label><textarea id="pubComments" placeholder="Observaciones, fortalezas, puntos de mejora o sustento de la decisión..."></textarea></div>
       </div>
-      <div class="btn-row" style="margin-top:18px"><button class="btn-success" id="pubSubmitBtn">Enviar evaluación</button></div>
-      <div id="pubEvalMsg" class="status-note" style="margin-top:12px"></div>
+      <div class="field-lite" style="margin-top:18px"><label for="pubFile">Adjuntar evaluación (obligatorio)</label><input type="file" id="pubFile" accept=".pdf,.doc,.docx,.xls,.xlsx"><small>PDF, Word o Excel. Máximo 10 MB.</small></div>
+      <div class="btn-row" style="margin-top:18px"><button class="btn-success" id="pubSubmitBtn">Enviar evaluación a RRHH</button></div>
+      <div id="pubEvalMsg" role="status" aria-live="polite" class="status-note" style="margin-top:12px"></div>
     </div>
   </div>
 </section>
@@ -429,6 +536,10 @@
       <button class="nav-btn" data-module="generar"><span class="nav-icon">✎</span>Generar contratos</button>
       <button class="nav-btn" data-module="tipos"><span class="nav-icon">?</span>Tipos de contrato</button>
       <button class="nav-btn" data-module="vacaciones"><span class="nav-icon">☀</span>Vacaciones</button>
+      <button class="nav-btn" data-module="certificados"><span class="nav-icon">▣</span>Certificados laborales</button>
+      <button class="nav-btn" data-module="roles"><span class="nav-icon">$</span>Roles de pago</button>
+      <button class="nav-btn" data-module="costos"><span class="nav-icon">🔒</span>Costo de personal</button>
+      <button class="nav-btn" data-module="externo"><span class="nav-icon">🧾</span>Personal por facturación</button>
     </aside>
     <div class="content-area">
       <main>
@@ -450,7 +561,43 @@
             <article class="kpi yellow clickable" data-drill="upcoming"><div class="label">Próximos hitos</div><div class="value" id="sumMilestones">0</div><div class="sub">Gestión próxima</div></article>
             <article class="kpi red clickable" data-drill="urgent"><div class="label">Urgentes</div><div class="value" id="sumUrgent">0</div><div class="sub">15 días o menos</div></article>
             <article class="kpi blue clickable" data-drill="evaluations"><div class="label">Evaluaciones pendientes</div><div class="value" id="sumEvaluations">—</div><div class="sub">Módulo en integración</div></article>
+            <article class="kpi gray clickable" id="kpiInactivos"><div class="label">Empleados inactivos</div><div class="value" id="sumInactivos">—</div><div class="sub" id="sumInactivosSub">Clic para ver detalle ▾</div></article>
           </section>
+
+          <div class="summary-card inac-collapse hidden" id="inactivosCard">
+            <div class="inac-head">
+              <div>
+                <h3>Empleados inactivos <span class="inac-count" id="inacCount">0</span></h3>
+                <p class="muted" style="margin-top:-5px">Colaboradores sin contrato vigente: fecha de ingreso, fecha de salida y último sueldo.</p>
+              </div>
+              <div style="display:flex;gap:8px">
+                <button class="export-btn" id="inacExportBtn">↓ Exportar CSV</button>
+                <button class="btn-mini" id="inacCloseBtn">Ocultar ▴</button>
+              </div>
+            </div>
+            <div class="filters inac-filters">
+              <input class="search" id="inacSearch" placeholder="Buscar colaborador, cargo o departamento...">
+              <select id="inacYear"><option value="">Todos los años de salida</option></select>
+              <select id="inacType"><option value="">Todos los tipos de contrato</option></select>
+            </div>
+            <div class="table-meta" style="padding:0 0 10px"><span id="inacMeta">Cargando...</span><span>Haz clic en un encabezado para ordenar</span></div>
+            <div class="commission-table-wrap inac-wrap">
+              <table class="commission-table inac-table">
+                <thead><tr>
+                  <th data-isort="empleado_nombre">Colaborador</th>
+                  <th data-isort="cargo">Cargo</th>
+                  <th data-isort="departamento">Departamento</th>
+                  <th data-isort="tipo_contrato">Tipo contrato</th>
+                  <th data-isort="fecha_ingreso">Ingreso</th>
+                  <th data-isort="fecha_salida" class="sorted">Salida</th>
+                  <th data-isort="dias_trabajados">Tiempo</th>
+                  <th data-isort="ultimo_sueldo" class="right">Último sueldo</th>
+                </tr></thead>
+                <tbody id="inacBody"></tbody>
+              </table>
+            </div>
+            <div id="inacEmpty" class="empty hidden">No hay empleados inactivos que coincidan con los filtros.</div>
+          </div>
 
           <div class="summary-card" style="margin-top:18px">
             <h3>Tipos de contrato</h3>
@@ -496,7 +643,7 @@
       <article class="kpi">
         <div class="label">Colaboradores</div>
         <div class="value" id="kpiEmployees">0</div>
-        <div class="sub">Empleados únicos</div>
+        <div class="sub" id="kpiEmployeesSub">Empleados únicos</div>
       </article>
       <article class="kpi green">
         <div class="label">Indefinidos</div>
@@ -523,6 +670,7 @@
     <section class="panel">
       <div class="filters">
         <input class="search" id="searchInput" placeholder="Buscar colaborador, cargo o jefe...">
+        <select id="departmentFilter"><option value="">Todos los departamentos</option></select>
         <select id="typeFilter"><option value="">Todos los tipos de contrato</option></select>
         <select id="bossFilter"><option value="">Todos los jefes</option></select>
         <select id="statusFilter">
@@ -548,6 +696,7 @@
             <tr>
               <th data-sort="empleado_nombre">Colaborador</th>
               <th data-sort="cargo">Cargo</th>
+              <th data-sort="_departamento">Departamento</th>
               <th data-sort="jefe_nombre">Jefe</th>
               <th data-sort="tipo_contrato">Tipo contrato</th>
               <th data-sort="salario">Sueldo</th>
@@ -574,10 +723,10 @@
             <div><button class="small-btn" id="evalRefreshBtn">↻ Actualizar evaluaciones</button></div>
           </div>
           <section class="kpis" style="margin-bottom:16px">
-            <article class="kpi yellow"><div class="label">Pendientes</div><div class="value" id="evalPendingKpi">0</div><div class="sub">Esperando respuesta</div></article>
-            <article class="kpi green"><div class="label">Recibidas</div><div class="value" id="evalReceivedKpi">0</div><div class="sub">Con respuesta o archivo</div></article>
-            <article class="kpi blue"><div class="label">Renovar / continuar</div><div class="value" id="evalContinueKpi">0</div><div class="sub">Decisiones positivas</div></article>
-            <article class="kpi red"><div class="label">No renovar</div><div class="value" id="evalStopKpi">0</div><div class="sub">Requieren gestión de salida</div></article>
+            <article class="kpi yellow clickable" data-kpi="pendiente"><div class="label">Pendientes</div><div class="value" id="evalPendingKpi">0</div><div class="sub">Esperando respuesta</div></article>
+            <article class="kpi green clickable" data-kpi="recibida"><div class="label">Recibidas</div><div class="value" id="evalReceivedKpi">0</div><div class="sub">Con respuesta o archivo</div></article>
+            <article class="kpi blue clickable" data-kpi="continuar_renovar"><div class="label">Renovar / continuar</div><div class="value" id="evalContinueKpi">0</div><div class="sub">Decisiones positivas</div></article>
+            <article class="kpi red clickable" data-kpi="prescindir"><div class="label">No renovar</div><div class="value" id="evalStopKpi">0</div><div class="sub">Requieren gestión de salida</div></article>
           </section>
           <div class="toolbar-card">
             <div class="toolbar-flex">
@@ -596,12 +745,13 @@
         <section id="module-comisiones" class="module">
           <div class="page-heading">
             <div><h2>Cálculo de comisiones</h2><p>Venta, facturación, cobros y analítica se consultan desde la misma base financiera del dashboard de Operaciones.</p></div>
-            <div><button class="small-btn" id="commRefreshBtn">↻ Actualizar datos</button></div>
+            <div style="display:flex;gap:8px"><button class="small-btn" id="commNewBtn">+ Nuevo cálculo</button><button class="small-btn" id="commRefreshBtn">↻ Actualizar datos</button></div>
           </div>
           <div id="commConnection" class="status-note">Fuente financiera: sin consultar.</div>
+          <div id="commExistingWarning" class="status-note warn hidden" style="margin-top:8px"></div>
           <div class="commission-panel" style="margin-top:14px">
             <div class="commission-grid">
-              <div class="field-lite span-2"><label>PO / Proyecto</label><select id="commProject"><option value="">Selecciona una PO...</option></select></div>
+              <div class="field-lite span-2"><label>PO / Proyecto</label><input id="commProject" list="commProjectList" placeholder="Escribe o elige el número de PO..."><datalist id="commProjectList"></datalist></div>
               <div class="field-lite"><label>Periodo de pago</label><input id="commPeriod" type="month"></div>
               <div class="field-lite"><label>Base para comisión</label><select id="commBaseType"><option value="cobrado">Cobrado</option><option value="facturado">Facturado</option><option value="venta">Venta / contrato</option></select></div>
               <div class="field-lite"><label>% comisión por defecto</label><input id="commPct" type="number" step="0.01" min="0" value="5"></div>
@@ -640,7 +790,14 @@
             </div>
             <div class="btn-row"><button class="btn-secondary" id="commPrintBtn">Generar reporte</button><button class="btn-secondary" id="commExcelBtn">Exportar Excel</button><button class="btn-success" id="commSaveBtn">Guardar cálculo</button></div>
           </div>
-          <div class="commission-panel"><h3>Histórico guardado</h3><div id="commSaved">Sin cálculos guardados.</div></div>
+          <div class="commission-panel"><h3>Guardados / pendientes de pago</h3><div id="commSaved">Sin cálculos guardados.</div></div>
+          <div class="commission-panel">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+              <h3 style="margin:0">Comisiones pagadas</h3>
+              <div class="mini" style="min-width:160px"><div class="l">Total neto pagado</div><div class="v" id="commPaidTotal">$0,00</div></div>
+            </div>
+            <div id="commPaidList" style="margin-top:10px">Sin comisiones pagadas registradas.</div>
+          </div>
         </section>
 
         <section id="module-documentos" class="module">
@@ -676,7 +833,7 @@
                   <option value="indef3">Indefinido 3 - Comercial + comisiones</option>
                   <option value="obra">Obra o servicio determinado</option>
                   <option value="pasantia">Pasantías - pendiente plantilla</option>
-                  <option value="sector">Sector Productivo - pendiente plantilla</option>
+                  <option value="sector">Sector Productivo (cargo variable)</option>
                   <option value="eventual">Trabajo Eventual Discontinuo - pendiente plantilla</option>
                 </select>
                 <div class="helper">Usa la pestaña “Tipos de contrato” si necesitas revisar cuál corresponde.</div>
@@ -707,7 +864,12 @@
               <div class="form-group"><label>Horario desde</label><input id="genTimeFrom" type="time"></div>
               <div class="form-group"><label>Horario hasta</label><input id="genTimeTo" type="time"></div>
               <div class="form-group"><label>Tiempo de alimentación</label><input id="genBreak" placeholder="Ej. 1 hora"></div>
-              <div class="form-group span-3"><label>Días de trabajo</label><input id="genWorkDays" placeholder="Ej. lunes a viernes"></div>
+              <div class="form-group"><label>Día desde</label>
+                <select id="genDayFrom"><option>Lunes</option><option>Martes</option><option>Miércoles</option><option>Jueves</option><option>Viernes</option><option>Sábado</option><option>Domingo</option></select>
+              </div>
+              <div class="form-group"><label>Día hasta</label>
+                <select id="genDayTo"><option>Viernes</option><option>Lunes</option><option>Martes</option><option>Miércoles</option><option>Jueves</option><option>Sábado</option><option>Domingo</option></select>
+              </div>
             </div>
 
             <div id="projectFields">
@@ -719,6 +881,11 @@
                 <div class="form-group"><label>Fecha contrato comercial</label><input id="genCommercialDate" type="date"></div>
                 <div class="form-group"><label>Culminación tentativa</label><input id="genEstimatedEnd" type="date"></div>
                 <div class="form-group span-3"><label>Alcance específico del trabajador</label><textarea id="genScope" placeholder="Ej. montaje eléctrico, fase de cimentación, supervisión del proyecto..."></textarea></div>
+                <div class="form-group"><label>Correo del trabajador</label><input id="genEmail" type="email" placeholder="correo@ejemplo.com"></div>
+                <div class="form-group"><label>Celular / WhatsApp</label><input id="genPhone" placeholder="09XXXXXXXX"></div>
+                <div class="form-group"><label>Periodicidad de pago</label>
+                  <select id="genPayFrequency"><option value="Mensual">Mensual</option><option value="Diaria">Diaria</option><option value="Por hora">Por hora</option></select>
+                </div>
               </div>
             </div>
 
@@ -826,6 +993,197 @@
             </div>
           </div>
         </section>
+
+        <section id="module-certificados" class="module">
+          <div class="page-heading">
+            <div>
+              <h2>Certificados laborales</h2>
+              <p>Genera un certificado laboral en Word con membrete de ENERGYCONTROL S.A.</p>
+            </div>
+          </div>
+          <div class="form-card">
+            <h3 class="section-title">1. Colaborador</h3>
+            <div class="form-grid">
+              <div class="form-group span-2">
+                <label>Colaborador</label>
+                <select id="certEmployee"><option value="">Selecciona un colaborador...</option></select>
+              </div>
+              <div class="form-group">
+                <label>Tipo de certificado</label>
+                <select id="certType">
+                  <option value="sin_sueldo">Laboral sin sueldo</option>
+                  <option value="con_sueldo">Laboral con sueldo</option>
+                </select>
+              </div>
+            </div>
+            <h3 class="section-title">2. Datos del certificado</h3>
+            <div class="form-grid">
+              <div class="form-group"><label>Cédula</label><input id="certId"></div>
+              <div class="form-group"><label>Cargo</label><input id="certJob"></div>
+              <div class="form-group"><label>Fecha de ingreso</label><input id="certStart" type="date"></div>
+              <div class="form-group"><label>Fecha de salida (solo inactivos)</label><input id="certEnd" type="date"></div>
+              <div class="form-group"><label>Sueldo mensual USD</label><input id="certSalary" type="number" step="0.01"></div>
+              <div class="form-group"><label>Ciudad</label><input id="certCity" value="Guayaquil"></div>
+              <div class="form-group">
+                <label>Tratamiento</label>
+                <select id="certTreatment"><option value="el Sr.">el Sr.</option><option value="la Sra.">la Sra.</option></select>
+              </div>
+              <div class="form-group"><label>Firmante</label><input id="certSigner" value="Msc. Ec. Shirley Maya Ch."></div>
+              <div class="form-group"><label>Cargo del firmante</label><input id="certSignerJob" value="Jefa de Recursos Humanos"></div>
+              <div class="form-group"><label>Cédula del firmante (opcional)</label><input id="certSignerId" value="0927237461"></div>
+            </div>
+            <div class="btn-row">
+              <button class="btn-secondary" id="certPreviewBtn">Vista previa</button>
+              <button class="btn-success" id="certWordBtn">Descargar certificado Word</button>
+            </div>
+            <div id="certPreview" class="preview-box"></div>
+          </div>
+        </section>
+
+        <section id="module-roles" class="module">
+          <div class="page-heading">
+            <div><h2>Roles de pago</h2><p>Consulta de roles de pago cargados por periodo y colaborador.</p></div>
+            <div><button class="small-btn" id="rolesRefreshBtn">↻ Actualizar</button></div>
+          </div>
+          <section class="kpis" style="margin-bottom:16px">
+            <article class="kpi blue"><div class="label">Roles cargados</div><div class="value" id="rolTotal">0</div><div class="sub">Registros totales</div></article>
+            <article class="kpi"><div class="label">Colaboradores</div><div class="value" id="rolEmployees">0</div><div class="sub">Con al menos un rol</div></article>
+            <article class="kpi green"><div class="label">Último periodo</div><div class="value" id="rolLatest" style="font-size:18px">—</div><div class="sub">Periodo más reciente cargado</div></article>
+          </section>
+          <section class="panel">
+            <div class="filters">
+              <select id="rolEmployeeFilter"><option value="">Todos los colaboradores</option></select>
+              <input id="rolMonthFilter" type="month">
+            </div>
+            <div class="table-meta"><span id="rolCount">0 registros</span></div>
+            <div class="table-wrap">
+              <div id="rolLoading" class="loading hidden">Cargando roles de pago...</div>
+              <table id="rolTable" class="hidden">
+                <thead><tr><th>Periodo</th><th>Colaborador</th><th>Área</th><th>Cargo</th><th>Ingresos</th><th>Egresos</th><th>Neto</th></tr></thead>
+                <tbody id="rolBody"></tbody>
+              </table>
+              <div id="rolEmpty" class="empty hidden">No hay roles de pago que coincidan con los filtros.</div>
+            </div>
+          </section>
+        </section>
+
+        <section id="module-costos" class="module">
+          <div class="page-heading">
+            <div><h2>Costo de personal</h2><p>Análisis mensual de remuneraciones, aportes patronales y provisiones por departamento.</p></div>
+            <div class="cost-private">🔒 Control gerencial privado</div>
+          </div>
+
+          <div class="toolbar-card">
+            <div class="toolbar-flex">
+              <div class="field-lite"><label>Vista de costo</label><select id="costView"><option value="fixed">Costo fijo (sin comisiones)</option><option value="total">Costo total (con comisiones)</option></select></div>
+              <div class="field-lite"><label>Periodo</label><input id="costMonthFilter" type="month"></div>
+              <div class="field-lite"><label>Departamento</label><select id="costDepartmentFilter"><option value="">Todos los departamentos</option></select></div>
+              <div class="field-lite"><label>Colaborador</label><select id="costEmployeeFilter"><option value="">Todos los colaboradores</option></select></div>
+              <div class="field-lite"><label>SBU para décimo cuarto (USD)</label><input id="costSbu" type="number" min="0" step="0.01" value="482"></div>
+              <div class="field-lite"><label>IESS patronal estimado (%)</label><input id="costIessRate" type="number" min="0" step="0.01" value="11.15"></div>
+            </div>
+            <div class="cost-assumptions" id="costAssumptions">Cálculo: remuneración mensual + IESS patronal + décimo tercero + décimo cuarto + vacaciones + fondos de reserva registrados en Odoo. Los valores son una estimación gerencial y no reemplazan la liquidación oficial de nómina.</div>
+          </div>
+
+          <div id="costLoading" class="loading hidden">Calculando costo de personal...</div>
+          <div id="costError" class="status-note err hidden"></div>
+          <div id="costContent" class="hidden view-fixed">
+            <section class="commission-kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+              <article class="mini"><div class="l" id="costTotalLabel">Costo fijo mensual</div><div class="v" id="costTotal">$0,00</div><div class="kpi-d" id="costTotalDesc">Suma de las tarjetas de abajo</div></article>
+              <article class="mini"><div class="l">Colaboradores</div><div class="v" id="costEmployees">0</div><div class="kpi-d">Personas con rol de pago en el mes</div></article>
+              <article class="mini"><div class="l">Costo promedio</div><div class="v" id="costAverage">$0,00</div><div class="kpi-d">Costo del mes ÷ colaboradores</div></article>
+            </section>
+            <section class="commission-kpis" id="costSplitKpis" style="grid-template-columns:repeat(2,minmax(0,1fr));margin-top:0">
+              <article class="mini split-costo"><div class="l">501 · Costo de ventas y producción</div><div class="v" id="costSplitCosto">$0,00</div><div class="kpi-d" id="costSplitCostoDesc">0% del total</div></article>
+              <article class="mini split-gasto"><div class="l">502 · Gastos</div><div class="v" id="costSplitGasto">$0,00</div><div class="kpi-d" id="costSplitGastoDesc">0% del total</div></article>
+              <article class="mini split-sin hidden" id="costSplitSinCard"><div class="l">Sin clasificar</div><div class="v" id="costSplitSin">$0,00</div><div class="kpi-d" id="costSplitSinDesc">Roles sin asiento 501/502 en Odoo</div></article>
+            </section>
+            <div class="cost-split-bar" id="costSplitBar"></div>
+            <div class="cost-split-check" id="costSplitCheck"></div>
+            <section class="commission-kpis" id="costBreakdownKpis" style="grid-template-columns:repeat(4,minmax(0,1fr));margin-top:0">
+              <article class="mini"><div class="l">Sueldos y salarios</div><div class="v" id="costRemuneration">$0,00</div><div class="kpi-d">Sueldo ganado + horas extras (sin comisiones)</div></article>
+              <article class="mini col-com"><div class="l">+ Comisiones</div><div class="v" id="costCommissions">$0,00</div><div class="kpi-d">Comisiones pagadas en el rol del mes</div></article>
+              <article class="mini"><div class="l">+ IESS patronal</div><div class="v" id="costIess">$0,00</div><div class="kpi-d" id="costIessDesc">Aporte patronal sobre sueldos</div></article>
+              <article class="mini"><div class="l">+ Beneficios y provisiones</div><div class="v" id="costBenefits">$0,00</div><div class="kpi-d">Décimo 3.º, décimo 4.º, vacaciones y fondos de reserva</div></article>
+            </section>
+
+            <section class="commission-panel">
+              <div class="cost-trend-head">
+                <div><h3>Tendencia mensual</h3><p id="costTrendNote">Evolución desde enero hasta el periodo seleccionado.</p></div>
+                <div class="cost-trend-control">
+                  <label>Indicador de la línea</label>
+                  <select id="costTrendMetric">
+                    <option value="salaries">Sueldos y salarios fijos</option>
+                    <option value="cost" id="costTrendCostOption">Costo fijo del mes</option>
+                    <option value="headcount">Número de colaboradores</option>
+                  </select>
+                </div>
+              </div>
+              <div id="costTrendSummary" class="cost-trend-summary"></div>
+              <div id="costTrendChart" class="cost-trend-chart" role="img" aria-label="Tendencia mensual del costo de personal"></div>
+            </section>
+
+            <section class="commission-panel">
+              <h3>Costo por departamento</h3>
+              <div id="costDepartmentBars" class="cost-bars"></div>
+            </section>
+
+            <section class="commission-panel">
+              <h3>Resumen por departamento</h3>
+              <p class="cost-click-hint">Haz clic en un departamento para ver su detalle de colaboradores abajo. Clic de nuevo para quitar la selección.</p>
+              <div class="commission-table-wrap">
+                <table class="commission-table">
+                  <thead><tr><th>Departamento</th><th class="center">Colaboradores</th><th class="right">Sueldos y salarios</th><th class="right col-com">Comisiones</th><th class="right">IESS patronal</th><th class="right">Provisiones</th><th class="right">Costo total</th><th class="right">501 Costo</th><th class="right">502 Gasto</th></tr></thead>
+                  <tbody id="costDepartmentBody"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="commission-panel">
+              <div class="cost-detail-head"><h3>Detalle por colaborador</h3><div id="costDetailFilter"></div></div>
+              <div class="commission-table-wrap">
+                <table class="commission-table">
+                  <thead><tr><th>Colaborador</th><th>Departamento</th><th class="right">Sueldos y salarios</th><th class="right col-com">Comisiones</th><th class="right">IESS patronal</th><th class="right">13.º</th><th class="right">14.º</th><th class="right">Vacaciones</th><th class="right">F. reserva</th><th class="right">Costo total</th><th class="center">Cuenta</th></tr></thead>
+                  <tbody id="costEmployeeBody"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+        <section id="module-externo" class="module">
+          <div class="page-heading">
+            <div><h2>Personal por facturación</h2><p>Personas pagadas fuera de nómina (facturas y anticipos) desde el 1 de enero. Arriendos excluidos del costo.</p></div>
+            <div class="sync-info">
+              <div>Última sincronización Odoo</div>
+              <strong id="extLastSync">—</strong>
+              <div style="margin-top:8px"><button class="small-btn" id="extRefreshBtn">↻ Actualizar</button></div>
+            </div>
+          </div>
+
+          <div id="extLoading" class="loading hidden">Cargando personal por facturación...</div>
+          <div id="extError" class="status-note err hidden"></div>
+
+          <div id="extContent" class="hidden">
+            <section class="commission-kpis" id="extKpis" style="grid-template-columns:repeat(5,minmax(0,1fr))">
+              <article class="mini navy"><div class="l">Costo total a la fecha</div><div class="v" id="extTotal">$0,00</div><div class="kpi-d">Facturado + anticipos + costo fiscal</div></article>
+              <article class="mini"><div class="l">Costo facturado</div><div class="v" id="extFacturado">$0,00</div><div class="kpi-d" id="extFacturadoDesc">Subtotal sin IVA</div></article>
+              <article class="mini amber"><div class="l">Pendiente de factura</div><div class="v" id="extPendiente">$0,00</div><div class="kpi-d">Anticipos del mes en curso</div></article>
+              <article class="mini red"><div class="l">Sin sustento</div><div class="v" id="extSinSustento">$0,00</div><div class="kpi-d">Anticipos de meses anteriores sin factura</div></article>
+              <article class="mini red"><div class="l">Costo fiscal estimado</div><div class="v" id="extFiscal">$0,00</div><div class="kpi-d">35% sobre lo no sustentado (25% IR + 10% retención)</div></article>
+            </section>
+
+            <section class="commission-panel">
+              <div class="cost-detail-head">
+                <h3>Personas</h3>
+                <div class="field-lite" style="min-width:220px"><select id="extGroupFilter"><option value="">Todos los grupos</option></select></div>
+              </div>
+              <p class="cost-click-hint">Haz clic en un nombre para desplegar su detalle.</p>
+              <div id="extList" class="ext-list"></div>
+            </section>
+
+            <div class="cost-assumptions">Fuente: facturas de proveedor y pagos publicados en Odoo, sincronizados con sync_personal_externo.py. "Sin sustento" = anticipos de meses anteriores que no están cruzados con una factura. El costo fiscal es una estimación gerencial, no una liquidación tributaria.</div>
+          </div>
+        </section>
       </main>
     </div>
   </div>
@@ -844,6 +1202,8 @@
   </div>
 </div>
 
+
+<div id="printArea"></div>
 
 <div id="evalModalBackdrop" class="modal-backdrop hidden">
   <div class="modal wide">
@@ -890,6 +1250,20 @@ let selectedEvalToken = null;
 let opsProjects = [];
 let opsInvoices = [];
 let commissionsLoaded = false;
+let savedCommissions = [];
+let editingCalcId = null;
+let anticiposComisiones = {};
+let rolesLoaded = false;
+let allRoles = [];
+let costsLoaded = false;
+let allInactivos = [];
+let inacSortField = "fecha_salida";
+let inacSortDir = -1;
+let externoLoaded = false;
+let extResumen = [];
+let extMensual = [];
+let extAnticipos = [];
+let extOpen = new Set();
 
 const $ = id => document.getElementById(id);
 
@@ -928,6 +1302,19 @@ function antiquity(days){
   const years = Math.floor(d/365);
   const months = Math.floor((d%365)/30);
   return months ? `${years}a ${months}m` : `${years} año${years===1?"":"s"}`;
+}
+
+function departmentOf(contract){
+  const candidates = [
+    contract.departamento,
+    contract.departamento_nombre,
+    contract.area,
+    contract.area_nombre,
+    contract.department,
+    contract.department_name
+  ];
+  const value = candidates.find(item=>String(item ?? "").trim());
+  return value ? String(value).trim() : "";
 }
 
 function statusLabel(s){
@@ -997,7 +1384,21 @@ async function loadContracts(){
     return;
   }
 
-  allContracts = data || [];
+  allContracts = (data || []).map(contract=>({
+    ...contract,
+    _departamento: departmentOf(contract)
+  }));
+
+  // Cargar evaluaciones junto con los contratos para que un hito ya evaluado
+  // deje de aparecer como URGENTE automáticamente.
+  const evalResp = await sb.from("alertas_evaluacion").select("*").order("creado_en",{ascending:false});
+  if(!evalResp.error){
+    evaluations = evalResp.data || [];
+    evaluationsLoaded = true;
+  } else {
+    console.warn("No se pudieron cruzar evaluaciones para los semáforos:", evalResp.error.message);
+  }
+
   const syncText = allContracts.length
     ? new Date(Math.max(...allContracts.map(x=>new Date(x.actualizado_en||0)))).toLocaleString("es-EC")
     : "Sin datos";
@@ -1009,11 +1410,17 @@ async function loadContracts(){
   applyFilters();
 
   $("loading").classList.add("hidden");
+  loadInactivos();
 }
 
 function buildFilters(){
   const types = [...new Set(allContracts.map(x=>x.tipo_contrato).filter(Boolean))].sort();
   const bosses = [...new Set(allContracts.map(x=>x.jefe_nombre).filter(Boolean))].sort();
+  const departments = [...new Set(allContracts.map(x=>x._departamento).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,"es",{sensitivity:"base"}));
+
+  $("departmentFilter").innerHTML = '<option value="">Todos los departamentos</option>' +
+    departments.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
 
   $("typeFilter").innerHTML = '<option value="">Todos los tipos de contrato</option>' +
     types.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
@@ -1036,6 +1443,7 @@ function buildFilters(){
       navigateModule("contratos");
       drillMode = "";
       $("typeFilter").value = btn.dataset.type;
+      $("departmentFilter").value = "";
       $("statusFilter").value = "";
       $("searchInput").value = "";
       applyFilters();
@@ -1055,19 +1463,33 @@ function buildFilters(){
     });
   $("genEmployee").innerHTML = '<option value="">Selecciona un colaborador...</option>' +
     uniqueEmployees.map(x=>`<option value="${x.empleado_id}">${esc(x.empleado_nombre)}</option>`).join("");
+  buildCertEmployeeOptions();
+  $("rolEmployeeFilter").innerHTML = '<option value="">Todos los colaboradores</option>' +
+    uniqueEmployees.map(x=>`<option value="${esc(x.empleado_nombre)}">${esc(x.empleado_nombre)}</option>`).join("");
 }
+
+function evaluationForCurrentMilestone(x){
+  const tipo = typeFromContract(x);
+  return evaluations.find(e=>
+    String(e.empleado_id)===String(x.empleado_id) &&
+    e.tipo_plazo===tipo &&
+    e.estado==="recibida"
+  ) || null;
+}
+function isResolvedByEvaluation(x){ return !!evaluationForCurrentMilestone(x); }
+function dashboardStatus(x){ return isResolvedByEvaluation(x) ? "EVALUADO" : x.estado; }
 
 function updateKpis(){
   const active = allContracts.filter(x=>x.activo !== false);
   $("kpiTotal").textContent = active.length;
   $("kpiEmployees").textContent = new Set(active.map(x=>x.empleado_id).filter(Boolean)).size;
   $("kpiIndef").textContent = active.filter(x=>(x.tipo_contrato||"").toLowerCase().includes("indefinido")).length;
-  $("kpiMilestones").textContent = active.filter(x=>x.estado==="PROXIMO_HITO").length;
-  $("kpiExpire").textContent = active.filter(x=>x.estado==="PROXIMO_VENCER").length;
+  $("kpiMilestones").textContent = active.filter(x=>dashboardStatus(x)==="PROXIMO_HITO").length;
+  $("kpiExpire").textContent = active.filter(x=>dashboardStatus(x)==="PROXIMO_VENCER").length;
   const indef = active.filter(x=>(x.tipo_contrato||"").toLowerCase().includes("indefinido")).length;
-  const milestones = active.filter(x=>x.estado==="PROXIMO_HITO").length;
-  const expire = active.filter(x=>x.estado==="PROXIMO_VENCER").length;
-  const urgent = active.filter(x=>x.estado==="URGENTE").length;
+  const milestones = active.filter(x=>dashboardStatus(x)==="PROXIMO_HITO").length;
+  const expire = active.filter(x=>dashboardStatus(x)==="PROXIMO_VENCER").length;
+  const urgent = active.filter(x=>dashboardStatus(x)==="URGENTE").length;
   $("kpiUrgent").textContent = urgent;
 
   $("sumTotal").textContent = active.length;
@@ -1082,27 +1504,38 @@ function updateKpis(){
 
 function applyFilters(){
   const q = $("searchInput").value.trim().toLowerCase();
+  const department = $("departmentFilter").value;
   const type = $("typeFilter").value;
   const boss = $("bossFilter").value;
   const status = $("statusFilter").value;
 
   filteredContracts = allContracts.filter(x=>{
     const haystack = [
-      x.empleado_nombre,x.cargo,x.jefe_nombre,x.jefe_email,
+      x.empleado_nombre,x.cargo,x._departamento,x.jefe_nombre,x.jefe_email,
       x.tipo_contrato,x.proximo_hito
     ].join(" ").toLowerCase();
 
+    const effectiveStatus = dashboardStatus(x);
     let drillOk = true;
-    if(drillMode==="urgent") drillOk = x.estado==="URGENTE";
-    if(drillMode==="upcoming") drillOk = ["PROXIMO_HITO","PROXIMO_VENCER"].includes(x.estado);
+    if(drillMode==="urgent") drillOk = effectiveStatus==="URGENTE";
+    if(drillMode==="upcoming") drillOk = ["PROXIMO_HITO","PROXIMO_VENCER"].includes(effectiveStatus);
     if(drillMode==="indef") drillOk = (x.tipo_contrato||"").toLowerCase().includes("indefinido");
 
     return drillOk
       && (!q || haystack.includes(q))
+      && (!department || x._departamento===department)
       && (!type || x.tipo_contrato===type)
       && (!boss || x.jefe_nombre===boss)
-      && (!status || x.estado===status);
+      && (!status || effectiveStatus===status);
   });
+
+  const uniqueEmployees = new Set(filteredContracts.map(x=>
+    x.empleado_id || String(x.empleado_nombre || "").trim().toLowerCase()
+  ).filter(Boolean)).size;
+  $("kpiEmployees").textContent = uniqueEmployees;
+  $("kpiEmployeesSub").textContent = department
+    ? `Empleados únicos en ${department}`
+    : (filteredContracts.length===allContracts.length ? "Empleados únicos" : "Empleados únicos según filtros");
 
   sortData();
   renderTable();
@@ -1119,7 +1552,10 @@ function sortData(){
 }
 
 function renderTable(){
-  $("resultCount").textContent = `${filteredContracts.length} registro${filteredContracts.length===1?"":"s"}`;
+  const uniqueEmployees = new Set(filteredContracts.map(x=>
+    x.empleado_id || String(x.empleado_nombre || "").trim().toLowerCase()
+  ).filter(Boolean)).size;
+  $("resultCount").textContent = `${filteredContracts.length} registro${filteredContracts.length===1?"":"s"} · ${uniqueEmployees} empleado${uniqueEmployees===1?"":"s"}`;
 
   if(!filteredContracts.length){
     $("contractsTable").classList.add("hidden");
@@ -1137,6 +1573,7 @@ function renderTable(){
     return `<tr data-index="${i}">
       <td class="employee" title="${esc(x.empleado_nombre)}">${esc(x.empleado_nombre)}</td>
       <td>${esc(x.cargo || "—")}</td>
+      <td>${esc(x._departamento || "—")}</td>
       <td>${esc(x.jefe_nombre || "—")}</td>
       <td>${esc(x.tipo_contrato || "—")}</td>
       <td class="money">${money(x.salario)}</td>
@@ -1145,7 +1582,7 @@ function renderTable(){
       <td>${esc(x.proximo_hito || "—")}</td>
       <td class="days ${dayClass}">${days ?? "—"}</td>
       <td>${dateEC(x.fecha_fin)}</td>
-      <td><span class="badge ${esc(x.estado)}">${statusLabel(x.estado)}</span></td>
+      <td>${(()=>{const ev=evaluationForCurrentMilestone(x);return ev?`<span class="badge EVALUADO">Evaluado · ${esc(ev.decision||"recibida")}</span>`:`<span class="badge ${esc(x.estado)}">${statusLabel(x.estado)}</span>`})()}</td>
     </tr>`;
   }).join("");
 
@@ -1159,6 +1596,7 @@ function openModal(x){
   $("modalTitle").textContent = x.empleado_nombre || "Detalle del contrato";
   const details = [
     ["Cargo",x.cargo],
+    ["Departamento",x._departamento],
     ["Jefe",x.jefe_nombre],
     ["Correo del jefe",x.jefe_email],
     ["Tipo de contrato",x.tipo_contrato],
@@ -1219,7 +1657,7 @@ function generationData(){
     "Lugar de trabajo": $("genWorkplace").value,
     "Horario": [$("genTimeFrom").value,$("genTimeTo").value].filter(Boolean).join(" - "),
     "Alimentación": $("genBreak").value,
-    "Días de trabajo": $("genWorkDays").value,
+    "Días de trabajo": $("genDayFrom").value + " a " + $("genDayTo").value,
     "Proyecto": $("genProject").value,
     "Cliente": $("genClient").value,
     "Referencia contractual": $("genCommercialContract").value,
@@ -1249,16 +1687,365 @@ function clearGeneration(){
   $("genPreview").classList.remove("show");
 }
 
-function prepareContract(){
+/* ============================================================
+   GENERACIÓN DE CONTRATOS (Word real desde plantilla)
+============================================================ */
+
+const MESES_ES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+
+// Recibe "YYYY-MM-DD" (o vacío) y devuelve {dia, mes, anio} en español. Si no hay fecha, usa hoy.
+function partesFecha(isoDate){
+  const d = isoDate ? new Date(isoDate + "T00:00:00") : new Date();
+  return { dia: String(d.getDate()), mes: MESES_ES[d.getMonth()], anio: String(d.getFullYear()), _d: d };
+}
+
+// Suma días a una fecha YYYY-MM-DD (o a hoy si viene vacía) y devuelve {dia, mes, anio}
+function partesFechaMasDias(isoDate, dias){
+  const base = isoDate ? new Date(isoDate + "T00:00:00") : new Date();
+  base.setDate(base.getDate() + dias);
+  return { dia: String(base.getDate()), mes: MESES_ES[base.getMonth()], anio: String(base.getFullYear()) };
+}
+
+function fechaLarga(d){
+  return `${d.getDate()} de ${MESES_ES[d.getMonth()]} de ${d.getFullYear()}`;
+}
+
+function money(v){
+  const n = Number(v || 0);
+  return n.toLocaleString("es-EC", {minimumFractionDigits:2, maximumFractionDigits:2});
+}
+
+// Arma el diccionario de etiquetas {tag: valor} según el tipo de plantilla seleccionado.
+function buildTagData(template){
+  const firma = partesFecha(""); // fecha de firma = hoy
+  const inicio = $("genStart").value;
+  const prueba = partesFechaMasDias(inicio, 90);
+
+  const data = {
+    ciudad: $("genCity").value || "",
+    dia_firma: firma.dia, mes_firma: firma.mes, anio_firma: firma.anio,
+    fecha_firma_larga: fechaLarga(firma._d),
+    nombre_trabajador: $("genName").value || "",
+    nacionalidad: $("genNationality").value || "",
+    estado_civil: $("genCivil").value || "",
+    cedula: $("genIdNumber").value || "",
+    profesion: $("genProfession").value || "",
+    cargo: $("genJob").value || "",
+    sueldo: money($("genSalary").value),
+    lugar_trabajo: $("genWorkplace").value || "",
+    dia_prueba: prueba.dia, mes_prueba: prueba.mes, anio_prueba: prueba.anio
+  };
+
+  // Solo Indefinido 1, 2 y 3 tienen la cláusula de "inicio efectivo de la relación laboral"
+  if(["indef1","indef2","indef3"].includes(template)){
+    const ini = partesFecha(inicio);
+    data.dia_inicio = ini.dia; data.mes_inicio = ini.mes; data.anio_inicio = ini.anio;
+  }
+
+  // Solo Indefinido 1 y Obra tienen jornada/horario detallado
+  if(["indef1","obra"].includes(template)){
+    data.hora_inicio = $("genTimeFrom").value || "";
+    data.hora_fin = $("genTimeTo").value || "";
+    data.dia_desde = $("genDayFrom").value || "";
+    data.dia_hasta = $("genDayTo").value || "";
+    data.minutos_alimentacion = $("genBreak").value || "";
+  }
+
+  // Solo Obra tiene los campos de proyecto/cliente/contacto
+  if(template === "obra"){
+    data.proyecto = $("genProject").value || "";
+    data.cliente = $("genClient").value || "";
+    data.referencia_contractual = $("genCommercialContract").value || "";
+    data.alcance = $("genScope").value || "";
+    data.correo_trabajador = $("genEmail").value || "";
+    data.celular_trabajador = $("genPhone").value || "";
+    data.periodicidad_pago = $("genPayFrequency").value || "Mensual";
+  }
+
+  return data;
+}
+
+async function generateContractWord(){
   const template = $("genTemplate").value;
   if(!template){alert("Selecciona primero la plantilla o tipo de contrato.");return;}
   if(!$("genName").value.trim()){alert("Selecciona o escribe el colaborador.");return;}
-  if(["pasantia","sector","eventual"].includes(template)){
+  if(["pasantia","eventual"].includes(template)){
     alert("Esta plantilla todavía no está cargada. Primero debemos incorporar el Word maestro correspondiente.");
     return;
   }
-  previewGeneration();
-  alert("Los datos quedaron preparados. El siguiente paso será conectarlos con la plantilla Word maestra para generar el archivo.");
+
+  const btn = $("genWordBtn");
+  const textoOriginal = btn.textContent;
+  btn.disabled = true; btn.textContent = "Generando...";
+
+  try{
+    // 1) Buscar la plantilla activa para este tipo de contrato
+    const { data: plantilla, error: errPlantilla } = await sb
+      .from("plantillas_contrato")
+      .select("archivo_url, nombre_archivo")
+      .eq("tipo_contrato", template)
+      .eq("activo", true)
+      .maybeSingle();
+
+    if(errPlantilla || !plantilla){
+      alert("No se encontró una plantilla activa para este tipo de contrato en la base de datos (tabla plantillas_contrato).");
+      return;
+    }
+
+    // 2) Descargar el .docx desde Supabase Storage
+    const { data: archivo, error: errStorage } = await sb
+      .storage.from("plantillas-contratos")
+      .download(plantilla.archivo_url);
+
+    if(errStorage || !archivo){
+      alert("No se pudo descargar la plantilla desde Storage: " + (errStorage?.message || "error desconocido"));
+      return;
+    }
+
+    // 3) Rellenar la plantilla con docxtemplater
+    const arrayBuffer = await archivo.arrayBuffer();
+    const zip = new PizZip(arrayBuffer);
+    const doc = new window.docxtemplater(zip, {
+      paragraphLoop: true,
+      linebreaks: true,
+      nullGetter: () => "" // si falta un dato, deja el espacio en blanco en vez de romper
+    });
+
+    doc.render(buildTagData(template));
+
+    const out = doc.getZip().generate({
+      type: "blob",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    });
+
+    // 4) Descargar el archivo generado
+    const nombreLimpio = ($("genName").value || "contrato").trim().replace(/[^\w\s-]/g,"").replace(/\s+/g,"_");
+    saveAs(out, `Contrato_${nombreLimpio}.docx`);
+
+  }catch(err){
+    console.error(err);
+    alert("Ocurrió un error generando el contrato: " + (err?.message || err));
+  }finally{
+    btn.disabled = false; btn.textContent = textoOriginal;
+  }
+}
+
+
+/* ============================================================
+   EMPLEADOS INACTIVOS (Resumen RRHH)
+   Fuente: vista v_empleados_inactivos (derivada de contratos_dashboard)
+============================================================ */
+async function loadInactivos(){
+  $("inacMeta").textContent = "Cargando...";
+  const {data,error} = await sb.from("v_empleados_inactivos").select("*");
+  if(error){
+    $("inacMeta").textContent = "No se pudieron cargar los inactivos: " + error.message;
+    return;
+  }
+  allInactivos = (data||[]).map(x=>({...x, ultimo_sueldo:Number(x.ultimo_sueldo||0), dias_trabajados:x.dias_trabajados===null?null:Number(x.dias_trabajados)}));
+  $("inacCount").textContent = allInactivos.length;
+  $("sumInactivos").textContent = allInactivos.length;
+
+  const years = [...new Set(allInactivos.map(x=>(x.fecha_salida||"").slice(0,4)).filter(Boolean))].sort().reverse();
+  $("inacYear").innerHTML = '<option value="">Todos los años de salida</option>' + years.map(y=>`<option value="${y}">${y}</option>`).join("");
+  const types = [...new Set(allInactivos.map(x=>x.tipo_contrato).filter(Boolean))].sort();
+  $("inacType").innerHTML = '<option value="">Todos los tipos de contrato</option>' + types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
+  renderInactivos();
+  buildCertEmployeeOptions();
+}
+
+function filteredInactivos(){
+  const q = $("inacSearch").value.trim().toLowerCase();
+  const y = $("inacYear").value;
+  const t = $("inacType").value;
+  return allInactivos.filter(x=>{
+    if(y && !(x.fecha_salida||"").startsWith(y)) return false;
+    if(t && x.tipo_contrato!==t) return false;
+    if(q){
+      const txt = [x.empleado_nombre,x.cargo,x.departamento,x.jefe_nombre].join(" ").toLowerCase();
+      if(!txt.includes(q)) return false;
+    }
+    return true;
+  }).sort((a,b)=>{
+    const va=a[inacSortField], vb=b[inacSortField];
+    if(va===null||va===undefined||va==="") return 1;
+    if(vb===null||vb===undefined||vb==="") return -1;
+    if(typeof va==="number") return (va-vb)*inacSortDir;
+    return String(va).localeCompare(String(vb),"es",{sensitivity:"base"})*inacSortDir;
+  });
+}
+
+function renderInactivos(){
+  const rows = filteredInactivos();
+  $("inacBody").innerHTML = rows.map(x=>`<tr>
+    <td><strong>${esc(x.empleado_nombre)}</strong></td>
+    <td>${esc(x.cargo||"—")}</td>
+    <td>${esc(x.departamento||"—")}</td>
+    <td>${esc(x.tipo_contrato||"—")}</td>
+    <td>${dateEC(x.fecha_ingreso)}</td>
+    <td>${dateEC(x.fecha_salida)}</td>
+    <td>${antiquity(x.dias_trabajados)}</td>
+    <td class="right">${money(x.ultimo_sueldo)}</td>
+  </tr>`).join("");
+  $("inacEmpty").classList.toggle("hidden", rows.length>0);
+  const total = rows.reduce((s,x)=>s+x.ultimo_sueldo,0);
+  $("inacMeta").textContent = `${rows.length} de ${allInactivos.length} colaboradores · Suma de últimos sueldos: ${money(total)}`;
+  document.querySelectorAll(".inac-table th[data-isort]").forEach(th=>{
+    th.classList.toggle("sorted", th.dataset.isort===inacSortField);
+    th.classList.toggle("asc", th.dataset.isort===inacSortField && inacSortDir===1);
+  });
+}
+
+function exportInactivos(){
+  const rows = filteredInactivos();
+  const head = ["Colaborador","Cargo","Departamento","Jefe","Tipo contrato","Fecha ingreso","Fecha salida","Días trabajados","Último sueldo"];
+  const lines = rows.map(x=>[x.empleado_nombre,x.cargo,x.departamento,x.jefe_nombre,x.tipo_contrato,x.fecha_ingreso,x.fecha_salida,x.dias_trabajados,x.ultimo_sueldo.toFixed(2)]
+    .map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(";"));
+  const blob = new Blob(["﻿"+[head.join(";"),...lines].join("\n")],{type:"text/csv;charset=utf-8"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `empleados_inactivos_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* ============================================================
+   PERSONAL POR FACTURACIÓN (fuera de nómina)
+   Fuente: v_personal_externo_resumen, v_personal_externo_mensual,
+           personal_externo_pagos (sync_personal_externo.py)
+============================================================ */
+const EXT_GRUPOS = ["Gerencia","Directores","Asesores"];
+const EXT_CONCEPTOS = ["Honorarios","Comisiones","Décimo cuarto","Honorarios 2025","Anticipo pendiente de factura","Anticipo sin sustento"];
+const extNum = v => Number(v||0);
+
+function periodoLabel(p){
+  const [y,m] = String(p).split("-");
+  const meses = ["ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic"];
+  return `${meses[Number(m)-1]||m} ${y}`;
+}
+
+async function loadExterno(){
+  $("extLoading").classList.remove("hidden");
+  $("extError").classList.add("hidden");
+  $("extContent").classList.add("hidden");
+  const [r1,r2,r3,r4] = await Promise.all([
+    sb.from("v_personal_externo_resumen").select("*"),
+    sb.from("v_personal_externo_mensual").select("*"),
+    sb.from("personal_externo_pagos").select("*").eq("es_anticipo",true).or("conciliado.is.null,conciliado.eq.false").order("fecha",{ascending:false}),
+    sb.from("personal_externo_facturas").select("actualizado_en").order("actualizado_en",{ascending:false}).limit(1)
+  ]);
+  $("extLoading").classList.add("hidden");
+  const err = r1.error||r2.error||r3.error;
+  if(err){
+    $("extError").textContent = "No fue posible cargar el personal por facturación. Verifica tu acceso de RRHH. (" + err.message + ")";
+    $("extError").classList.remove("hidden");
+    return;
+  }
+  extResumen = r1.data||[];
+  extMensual = r2.data||[];
+  extAnticipos = r3.data||[];
+  $("extLastSync").textContent = r4.data?.[0]?.actualizado_en ? new Date(r4.data[0].actualizado_en).toLocaleString("es-EC") : "—";
+  const grupos = [...new Set(extResumen.map(x=>x.grupo).filter(Boolean))]
+    .sort((a,b)=>(EXT_GRUPOS.indexOf(a)+99*(EXT_GRUPOS.indexOf(a)<0))-(EXT_GRUPOS.indexOf(b)+99*(EXT_GRUPOS.indexOf(b)<0)));
+  $("extGroupFilter").innerHTML = '<option value="">Todos los grupos</option>' + grupos.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join("");
+  externoLoaded = true;
+  $("extContent").classList.remove("hidden");
+  renderExterno();
+}
+
+function sumExt(rows){
+  const keys = ["honorarios","comisiones","decimo_cuarto","honorarios_2025","costo_facturado","anticipos_pendientes_mes","anticipos_sin_sustento","costo_fiscal_estimado","costo_total"];
+  const o = {};
+  keys.forEach(k=>o[k]=rows.reduce((s,r)=>s+extNum(r[k]),0));
+  return o;
+}
+
+function extStat(label,value,cls=""){
+  const v = extNum(value);
+  return `<div class="ext-stat ${v?cls:"zero"}"><div class="l">${label}</div><div class="v">${money(v)}</div></div>`;
+}
+
+function extPersonBody(r){
+  const pid = r.partner_id;
+  const filas = extMensual.filter(m=>m.partner_id===pid);
+  const periodos = [...new Set(filas.map(f=>f.periodo))].sort();
+  const conceptos = EXT_CONCEPTOS.filter(c=>filas.some(f=>f.concepto===c));
+  const hayArriendo = filas.some(f=>f.concepto==="Arriendo");
+  const val = (p,c)=>filas.filter(f=>f.periodo===p && f.concepto===c).reduce((s,f)=>s+extNum(f.monto),0);
+
+  let html = `<p class="cost-click-hint" style="margin:10px 0 0">RUC/CI ${esc(r.ruc_ci||"—")} · ${extNum(r.n_facturas)} facturas · Último pago ${dateEC(r.ultimo_pago)} · Promedio mensual facturado ${r.promedio_mensual==null?"—":money(r.promedio_mensual)}</p>
+  <div class="ext-stats">
+    ${extStat("Honorarios",r.honorarios)}${extStat("Comisiones",r.comisiones)}${extStat("Décimo 4.º",r.decimo_cuarto)}${extStat("Honorarios 2025",r.honorarios_2025)}${extStat("Costo facturado",r.costo_facturado)}
+    ${extStat("Pendiente de factura",r.anticipos_pendientes_mes,"amber")}${extStat("Sin sustento",r.anticipos_sin_sustento,"red")}${extStat("Costo fiscal (35%)",r.costo_fiscal_estimado,"red")}${extStat("Arriendo (no suma)",r.arriendo_excluido)}${extStat("Costo total",r.costo_total)}
+  </div>`;
+
+  if(periodos.length){
+    const totCol = {}; let totalGeneral = 0;
+    let body = periodos.map(p=>{
+      let t = 0;
+      const tds = conceptos.map(c=>{const v=val(p,c);t+=v;totCol[c]=(totCol[c]||0)+v;return `<td class="right ${c==="Anticipo sin sustento"&&v?"ext-red":""}">${v?money(v):"—"}</td>`;}).join("");
+      totalGeneral += t;
+      const arr = hayArriendo ? `<td class="right ext-muted-col">${val(p,"Arriendo")?money(val(p,"Arriendo")):"—"}</td>` : "";
+      return `<tr><td>${periodoLabel(p)}</td>${tds}<td class="right"><strong>${money(t)}</strong></td>${arr}</tr>`;
+    }).join("");
+    const arrTot = hayArriendo ? `<td class="right">${money(filas.filter(f=>f.concepto==="Arriendo").reduce((s,f)=>s+extNum(f.monto),0))}</td>` : "";
+    body += `<tr class="ext-total-row"><td>TOTAL</td>${conceptos.map(c=>`<td class="right">${money(totCol[c]||0)}</td>`).join("")}<td class="right">${money(totalGeneral)}</td>${arrTot}</tr>`;
+    html += `<h4>Detalle mensual</h4><div class="commission-table-wrap"><table class="commission-table">
+      <thead><tr><th>Mes</th>${conceptos.map(c=>`<th class="right">${esc(c)}</th>`).join("")}<th class="right">Total mes</th>${hayArriendo?'<th class="right">Arriendo (no suma)</th>':""}</tr></thead>
+      <tbody>${body}</tbody></table></div>`;
+  }
+
+  const mesActual = new Date().toISOString().slice(0,7);
+  const ants = extAnticipos.filter(a=>a.partner_id===pid);
+  if(ants.length){
+    html += `<h4>Anticipos sin factura</h4><div class="commission-table-wrap"><table class="commission-table">
+      <thead><tr><th>Fecha</th><th>Pago</th><th>Memo</th><th>Estado</th><th class="right">Importe</th></tr></thead><tbody>
+      ${ants.map(a=>{const sin=a.periodo<mesActual;return `<tr><td>${dateEC(a.fecha)}</td><td>${esc(a.pago)}</td><td>${esc(a.memo)}</td>
+        <td>${sin?'<span class="ext-flag">Sin sustento</span>':'<span class="ext-flag amber">Pendiente del mes</span>'}</td>
+        <td class="right ${sin?"ext-red":""}">${money(a.importe)}</td></tr>`;}).join("")}
+      </tbody></table></div>`;
+  }
+  return html;
+}
+
+function renderExterno(){
+  const g = $("extGroupFilter").value;
+  const rows = extResumen.filter(r=>!g || r.grupo===g);
+  const tot = sumExt(rows);
+
+  $("extTotal").textContent = money(tot.costo_total);
+  $("extFacturado").textContent = money(tot.costo_facturado);
+  $("extFacturadoDesc").textContent = `Subtotal sin IVA · ${rows.length} personas`;
+  $("extPendiente").textContent = money(tot.anticipos_pendientes_mes);
+  $("extSinSustento").textContent = money(tot.anticipos_sin_sustento);
+  $("extFiscal").textContent = money(tot.costo_fiscal_estimado);
+
+  const orden = [...new Set(rows.map(r=>r.grupo||"Sin grupo"))]
+    .sort((a,b)=>{const ia=EXT_GRUPOS.indexOf(a),ib=EXT_GRUPOS.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
+  let html = "";
+  orden.forEach(grupo=>{
+    const gr = rows.filter(r=>(r.grupo||"Sin grupo")===grupo).sort((a,b)=>extNum(b.costo_total)-extNum(a.costo_total));
+    html += `<div class="ext-group"><span>${esc(grupo)} · ${gr.length}</span><span>${money(sumExt(gr).costo_total)}</span></div>`;
+    gr.forEach(r=>{
+      const flags = (extNum(r.anticipos_sin_sustento)?'<span class="ext-flag">Sin sustento</span>':'') + (!extNum(r.n_facturas)?'<span class="ext-flag amber">Sin facturas</span>':'');
+      const open = extOpen.has(r.partner_id);
+      html += `<div class="ext-item ${open?"open":""}" data-pid="${r.partner_id}">
+        <button class="ext-item-head" type="button"><span class="ext-caret">▶</span><span class="ext-name">${esc(r.nombre)}${flags}</span><span class="ext-cargo">${esc(r.cargo||"")}</span><span class="ext-amount">${money(r.costo_total)}</span></button>
+        <div class="ext-body">${open?extPersonBody(r):""}</div>
+      </div>`;
+    });
+  });
+  html += `<div class="ext-total"><span>TOTAL · ${rows.length} personas</span><span>${money(tot.costo_total)}</span></div>`;
+  $("extList").innerHTML = html;
+
+  $("extList").querySelectorAll(".ext-item").forEach(item=>{
+    item.querySelector(".ext-item-head").addEventListener("click",()=>{
+      const pid = Number(item.dataset.pid);
+      const r = extResumen.find(x=>x.partner_id===pid);
+      if(extOpen.has(pid)){ extOpen.delete(pid); item.classList.remove("open"); }
+      else { extOpen.add(pid); item.querySelector(".ext-body").innerHTML = extPersonBody(r); item.classList.add("open"); }
+    });
+  });
 }
 
 function navigateModule(name){
@@ -1269,6 +2056,9 @@ function navigateModule(name){
   if(name==="vacaciones" && !vacationsLoaded) loadVacations();
   if(name==="evaluaciones" && !evaluationsLoaded) loadEvaluations();
   if(name==="comisiones" && !commissionsLoaded) loadCommissionData();
+  if(name==="roles" && !rolesLoaded) loadRoles();
+  if(name==="costos" && !costsLoaded) loadCosts();
+  if(name==="externo" && !externoLoaded) loadExterno();
 }
 
 function drillTo(mode){
@@ -1279,6 +2069,7 @@ function drillTo(mode){
   navigateModule("contratos");
   drillMode = mode==="all" ? "" : mode;
   $("searchInput").value = "";
+  $("departmentFilter").value = "";
   $("typeFilter").value = "";
   $("bossFilter").value = "";
   $("statusFilter").value = "";
@@ -1433,32 +2224,122 @@ async function loadEvaluations(){
   if(error){$("evalBody").innerHTML=`<tr><td colspan="9">${esc(error.message)}</td></tr>`;return;}
   evaluations=data||[];evaluationsLoaded=true;renderEvaluations();
 }
+let evalActiveKpi=null;
+function setEvalKpiFilter(key){
+  evalActiveKpi=(evalActiveKpi===key)?null:key;
+  document.querySelectorAll("#module-evaluaciones .kpi.clickable").forEach(el=>el.classList.toggle("active",el.dataset.kpi===evalActiveKpi));
+  renderEvaluations();
+}
+function evalMatchesKpi(x){
+  if(!evalActiveKpi)return true;
+  if(evalActiveKpi==="pendiente")return x.estado==="pendiente";
+  if(evalActiveKpi==="recibida")return x.estado==="recibida";
+  if(evalActiveKpi==="continuar_renovar")return ["continuar","renovar","extender_indefinido"].includes(x.decision);
+  if(evalActiveKpi==="prescindir")return x.decision==="prescindir";
+  return true;
+}
 function renderEvaluations(){
   const q=($("evalSearch")?.value||"").toLowerCase().trim(), st=$("evalStatus")?.value||"";
-  const rows=evaluations.filter(x=>(!st||x.estado===st)&&(!q||[x.empleado_nombre,x.jefe_nombre,x.tipo_plazo,x.decision,x.proxima_alerta].join(" ").toLowerCase().includes(q)));
-  const pending=evaluations.filter(x=>x.estado==="pendiente").length, received=evaluations.filter(x=>x.estado==="recibida").length;
+  const visibles=evaluations.filter(x=>x.estado!=="anulada");
+  const rows=visibles.filter(x=>(!st||x.estado===st)&&evalMatchesKpi(x)&&(!q||[x.empleado_nombre,x.jefe_nombre,x.tipo_plazo,x.decision,x.proxima_alerta].join(" ").toLowerCase().includes(q)));
+  const pending=visibles.filter(x=>x.estado==="pendiente").length, received=visibles.filter(x=>x.estado==="recibida").length;
   $("evalPendingKpi").textContent=pending;$("evalReceivedKpi").textContent=received;$("sumEvaluations").textContent=pending;
-  $("evalContinueKpi").textContent=evaluations.filter(x=>["continuar","renovar","extender_indefinido"].includes(x.decision)).length;
-  $("evalStopKpi").textContent=evaluations.filter(x=>x.decision==="prescindir").length;
-  $("evalBody").innerHTML=rows.map(x=>`<tr><td><b>${esc(x.empleado_nombre)}</b></td><td>${esc(x.tipo_plazo==="fin_contrato"?"Fin contrato":x.tipo_plazo+" días")}</td><td>${esc(x.jefe_nombre||"—")}</td><td><span class="badge ${x.estado==="recibida"?"ACTIVO":"PROXIMO_HITO"}">${esc(x.estado)}</span></td><td>${x.fecha_recibida?new Date(x.fecha_recibida).toLocaleDateString("es-EC"):"—"}</td><td>${esc(x.decision||"—")}</td><td>${esc(x.proxima_alerta||"—")}</td><td>${x.archivo_url?`<button class="btn-mini blue" data-eval-open="${x.token}">Abrir</button>`:"—"}</td><td><button class="btn-mini green" data-eval-send="${x.token}">Enviar enlace</button> <button class="btn-mini" data-eval-upload="${x.token}">Subir</button> <button class="btn-mini" data-eval-manage="${x.token}">Gestionar</button></td></tr>`).join("")||'<tr><td colspan="9">No hay evaluaciones para este filtro.</td></tr>';
+  $("evalContinueKpi").textContent=visibles.filter(x=>["continuar","renovar","extender_indefinido"].includes(x.decision)).length;
+  $("evalStopKpi").textContent=visibles.filter(x=>x.decision==="prescindir").length;
+  $("evalBody").innerHTML=rows.map(x=>`<tr><td><b>${esc(x.empleado_nombre)}</b></td><td>${esc(x.tipo_plazo==="fin_contrato"?"Fin contrato":x.tipo_plazo+" días")}</td><td>${esc(x.jefe_nombre||"—")}</td><td><span class="badge ${x.estado==="recibida"?"ACTIVO":"PROXIMO_HITO"}">${esc(x.estado)}</span></td><td>${x.fecha_recibida?new Date(x.fecha_recibida).toLocaleDateString("es-EC"):"—"}</td><td>${esc(x.decision||"—")}</td><td>${esc(x.proxima_alerta||"—")}</td><td>${x.archivo_url?`<button class="btn-mini blue" data-eval-open="${x.token}">Abrir</button>`:"—"}</td><td><button class="btn-mini green" data-eval-send="${x.token}">Enviar enlace</button> <button class="btn-mini" data-eval-upload="${x.token}">Subir</button> <button class="btn-mini" data-eval-manage="${x.token}">Gestionar</button>${x.estado==="pendiente"?` <button class="btn-mini danger" data-eval-delete="${x.token}">Eliminar</button>`:x.estado==="recibida"?` <button class="btn-mini danger" data-eval-reset="${x.token}">Reiniciar</button>`:""}</td></tr>`).join("")||'<tr><td colspan="9">No hay evaluaciones para este filtro.</td></tr>';
   document.querySelectorAll("[data-eval-send]").forEach(b=>b.onclick=()=>resendEval(b.dataset.evalSend));
   document.querySelectorAll("[data-eval-upload]").forEach(b=>b.onclick=()=>{selectedEvalToken=b.dataset.evalUpload;$("evalFileInput").click()});
   document.querySelectorAll("[data-eval-manage]").forEach(b=>b.onclick=()=>openEvalManager(b.dataset.evalManage));
   document.querySelectorAll("[data-eval-open]").forEach(b=>b.onclick=()=>openEvalFile(b.dataset.evalOpen));
+  document.querySelectorAll("[data-eval-delete]").forEach(b=>b.onclick=()=>deleteEvaluation(b.dataset.evalDelete));
+  document.querySelectorAll("[data-eval-reset]").forEach(b=>b.onclick=()=>resetEvaluation(b.dataset.evalReset));
 }
-async function resendEval(token){const x=evaluations.find(e=>e.token===token);if(!x)return;const link=x.enlace_formulario||evalLink(token);await navigator.clipboard?.writeText(link);if(x.jefe_email){const subj=`Evaluación de ${x.empleado_nombre}`,body=`Hola ${x.jefe_nombre||""},\n\nPor favor completa la evaluación de ${x.empleado_nombre}:\n${link}\n\nGracias.`;location.href=`mailto:${encodeURIComponent(x.jefe_email)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;}else alert("Enlace copiado:\n"+link)}
-async function uploadEvaluationFile(file,token){if(!file||!token)return;const x=evaluations.find(e=>e.token===token);const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");const path=`${x?.empleado_id||"sin_id"}/${token}/${Date.now()}_${safe}`;const up=await sb.storage.from("evaluaciones-rrhh").upload(path,file,{upsert:false});if(up.error){alert("No se pudo subir el archivo: "+up.error.message);return;}const upd=await sb.from("alertas_evaluacion").update({archivo_url:path,estado:"recibida",fecha_recibida:new Date().toISOString(),actualizado_en:new Date().toISOString()}).eq("token",token);if(upd.error){alert(upd.error.message);return;}evaluationsLoaded=false;await loadEvaluations();alert("Evaluación subida correctamente.")}
+async function deleteEvaluation(token){
+  const x=evaluations.find(e=>e.token===token); if(!x)return;
+  if(x.estado!=="pendiente"){ alert("Solo se pueden eliminar evaluaciones pendientes o creadas por prueba."); return; }
+  if(!confirm(`¿Eliminar la evaluación pendiente de ${x.empleado_nombre}?\n\nÚsalo para pruebas o evaluaciones creadas por error. Esta acción la quitará de Pendientes.`))return;
+
+  // Intentar eliminar físicamente. Si RLS no permite DELETE, la anulamos y la ocultamos.
+  const del=await sb.from("alertas_evaluacion").delete().eq("token",token);
+  if(del.error){
+    const upd=await sb.from("alertas_evaluacion").update({estado:"anulada",actualizado_en:new Date().toISOString()}).eq("token",token);
+    if(upd.error){alert("No se pudo eliminar/anular la evaluación: "+upd.error.message);return;}
+  }
+  evaluationsLoaded=false;
+  await loadEvaluations();
+  updateKpis();
+  applyFilters();
+}
+async function resetEvaluation(token){
+  const x=evaluations.find(e=>e.token===token); if(!x)return;
+  if(x.estado!=="recibida"){ alert("Esta opción solo aplica a evaluaciones ya recibidas."); return; }
+  if(!confirm(`¿Reiniciar la evaluación de ${x.empleado_nombre}?\n\nSe borrará el archivo subido y las respuestas, y volverá a estado "pendiente" para recibir una nueva evaluación.`))return;
+  if(x.archivo_url){
+    const rm=await sb.storage.from("evaluaciones-rrhh").remove([x.archivo_url]);
+    if(rm.error){ alert("No se pudo borrar el archivo anterior: "+rm.error.message+"\n\nNo se reinició la evaluación."); return; }
+  }
+  const upd=await sb.from("alertas_evaluacion").update({estado:"pendiente",archivo_url:null,decision:null,desempeno:null,comentarios:null,evaluador_nombre:null,fecha_recibida:null,actualizado_en:new Date().toISOString()}).eq("token",token);
+  if(upd.error){alert("No se pudo reiniciar la evaluación: "+upd.error.message);return;}
+  evaluationsLoaded=false;
+  await loadEvaluations();
+  updateKpis();
+  applyFilters();
+}
+async function resendEval(token){const x=evaluations.find(e=>e.token===token);if(!x)return;const link=evalLink(token);await navigator.clipboard?.writeText(link);if(x.jefe_email){const subj=`Evaluación de ${x.empleado_nombre}`,body=`Hola ${x.jefe_nombre||""},\n\nPor favor completa la evaluación de ${x.empleado_nombre}:\n${link}\n\nGracias.`;location.href=`mailto:${encodeURIComponent(x.jefe_email)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;}else alert("Enlace copiado:\n"+link)}
+async function uploadEvaluationFile(file,token){if(!file||!token)return;const x=evaluations.find(e=>e.token===token);const safe=file.name.replace(/[^a-zA-Z0-9._-]/g,"_");const path=`${x?.empleado_id||"sin_id"}/${token}/${Date.now()}_${safe}`;const up=await sb.storage.from("evaluaciones-rrhh").upload(path,file,{upsert:false});if(up.error){alert("No se pudo subir el archivo: "+up.error.message);return;}const upd=await sb.from("alertas_evaluacion").update({archivo_url:path,estado:"recibida",fecha_recibida:new Date().toISOString(),actualizado_en:new Date().toISOString()}).eq("token",token);if(upd.error){alert(upd.error.message);return;}evaluationsLoaded=false;await loadEvaluations();updateKpis();applyFilters();alert("Evaluación subida correctamente.")}
 async function openEvalFile(token){const x=evaluations.find(e=>e.token===token);if(!x?.archivo_url)return;const {data,error}=await sb.storage.from("evaluaciones-rrhh").createSignedUrl(x.archivo_url,300);if(error){alert(error.message);return;}window.open(data.signedUrl,"_blank")}
 function openEvalManager(token){const x=evaluations.find(e=>e.token===token);if(!x)return;selectedEvalToken=token;$("evalModalTitle").textContent="Evaluación — "+x.empleado_nombre;$("evalEditDecision").value=x.decision||"";$("evalEditPerformance").value=x.desempeno||"";$("evalEditEvaluator").value=x.evaluador_nombre||"";$("evalEditComments").value=x.comentarios||"";$("evalEditNext").value=x.proxima_alerta||"";$("evalModalBackdrop").classList.remove("hidden")}
-async function saveEvalManager(){if(!selectedEvalToken)return;const decision=$("evalEditDecision").value||null;let next=$("evalEditNext").value.trim();if(!next&&decision){next={renovar:"Preparar renovación contractual",extender_indefinido:"Preparar contrato indefinido",prescindir:"Iniciar proceso de salida / no renovación",continuar:"Continuar seguimiento"}[decision]||""}const payload={decision,desempeno:$("evalEditPerformance").value.trim()||null,evaluador_nombre:$("evalEditEvaluator").value.trim()||null,comentarios:$("evalEditComments").value.trim()||null,proxima_alerta:next||null,actualizado_en:new Date().toISOString()};if(decision){payload.estado="recibida";payload.fecha_recibida=new Date().toISOString()}const {error}=await sb.from("alertas_evaluacion").update(payload).eq("token",selectedEvalToken);if(error){alert(error.message);return;}$("evalModalBackdrop").classList.add("hidden");evaluationsLoaded=false;await loadEvaluations()}
+async function saveEvalManager(){if(!selectedEvalToken)return;const decision=$("evalEditDecision").value||null;let next=$("evalEditNext").value.trim();if(!next&&decision){next={renovar:"Preparar renovación contractual",extender_indefinido:"Preparar contrato indefinido",prescindir:"Iniciar proceso de salida / no renovación",continuar:"Continuar seguimiento"}[decision]||""}const payload={decision,desempeno:$("evalEditPerformance").value.trim()||null,evaluador_nombre:$("evalEditEvaluator").value.trim()||null,comentarios:$("evalEditComments").value.trim()||null,proxima_alerta:next||null,actualizado_en:new Date().toISOString()};if(decision){payload.estado="recibida";payload.fecha_recibida=new Date().toISOString()}const {error}=await sb.from("alertas_evaluacion").update(payload).eq("token",selectedEvalToken);if(error){alert(error.message);return;}$("evalModalBackdrop").classList.add("hidden");evaluationsLoaded=false;await loadEvaluations();updateKpis();applyFilters()}
 
 async function loadPublicEvaluation(token){
   $("loginView").classList.add("hidden");$("appView").classList.add("hidden");$("publicEvalView").classList.remove("hidden");
-  const {data,error}=await sb.rpc("obtener_evaluacion_publica",{p_token:token});
-  if(error||!data?.length){$("pubEvalIntro").textContent="El enlace no es válido o la evaluación ya no está disponible.";return;}
-  const x=data[0];$("pubEvalTitle").textContent="Evaluación de "+x.empleado_nombre;$("pubEvalIntro").textContent=`Hito: ${x.tipo_plazo==="fin_contrato"?"Fin de contrato":x.tipo_plazo+" días"}. Completa la decisión y observaciones para que RRHH continúe el proceso.`;$("pubEvalForm").classList.remove("hidden");
-  $("pubSubmitBtn").onclick=async()=>{const dec=$("pubDecision").value;if(!dec||!$("pubEvaluator").value.trim()){$("pubEvalMsg").className="status-note err";$("pubEvalMsg").textContent="Completa tu nombre y la decisión.";return;}$("pubSubmitBtn").disabled=true;const r=await sb.rpc("guardar_evaluacion_publica",{p_token:token,p_decision:dec,p_desempeno:$("pubPerformance").value,p_comentarios:$("pubComments").value,p_evaluador_nombre:$("pubEvaluator").value});$("pubSubmitBtn").disabled=false;if(r.error){$("pubEvalMsg").className="status-note err";$("pubEvalMsg").textContent="No se pudo enviar: "+r.error.message;return;}$("pubEvalMsg").className="status-note ok";$("pubEvalMsg").textContent="Evaluación enviada correctamente. Gracias.";$("pubSubmitBtn").classList.add("hidden")}
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)){
+    $("pubEvalIntro").textContent="El enlace no es válido.";return;
+  }
+  token=token.toLowerCase();
+  // Sesión independiente: el formulario siempre usa los permisos públicos del token.
+  const pubSb=supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+  const msg=(text,error=false)=>{$("pubEvalMsg").className="status-note "+(error?"err":"ok");$("pubEvalMsg").textContent=text;};
+  const finish=()=>{document.querySelectorAll("#pubEvalForm input, #pubEvalForm select, #pubEvalForm textarea, #pubEvalForm button").forEach(e=>e.disabled=true);msg("Evaluación recibida por RRHH. Gracias.");};
+  try{
+    const {data,error}=await pubSb.rpc("rrhh_public_get",{p_token:token});
+    if(error)throw error;
+    if(!data?.length){$("pubEvalIntro").textContent="El enlace no es válido o ya no está disponible.";return;}
+    const x=data[0];$("pubEvalTitle").textContent="Evaluación de "+x.empleado_nombre;
+    $("pubEvalIntro").textContent=`Hito: ${x.tipo_plazo==="fin_contrato"?"Fin de contrato":x.tipo_plazo+" días"}. Registra la decisión y adjunta el documento de evaluación.`;
+    $("pubEvalForm").classList.remove("hidden");
+    if(x.estado==="recibida"){finish();return;}
+    if(x.estado!=="pendiente"){$("pubEvalForm").classList.add("hidden");$("pubEvalIntro").textContent="Esta evaluación ya no admite respuestas.";return;}
+  }catch(e){$("pubEvalIntro").textContent="No se pudo cargar la evaluación. Comprueba tu conexión y vuelve a abrir el enlace.";return;}
+  let uploaded=null;
+  $("pubSubmitBtn").onclick=async()=>{
+    const button=$("pubSubmitBtn");if(button.disabled)return;
+    const file=$("pubFile").files?.[0], decision=$("pubDecision").value;
+    const evaluator=$("pubEvaluator").value.trim(), performance=$("pubPerformance").value, comments=$("pubComments").value.trim();
+    if(!decision||!evaluator||!performance){msg("Completa tu nombre, decisión y desempeño.",true);return;}
+    if(evaluator.length>200||comments.length>10000){msg("Usa hasta 200 caracteres en el nombre y 10.000 en comentarios.",true);return;}
+    if(!file||! /\.(pdf|docx?|xlsx?)$/i.test(file.name)||file.size===0||file.size>10*1024*1024){msg("Adjunta un PDF, Word o Excel de hasta 10 MB, que no esté vacío.",true);return;}
+    button.disabled=true;let complete=false;
+    try{
+      if(!uploaded||uploaded.file!==file){
+        msg("Subiendo archivo…");
+        const path=`public/${token}/${crypto.randomUUID()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,"_").slice(-150)}`;
+        const {error}=await pubSb.storage.from("evaluaciones-rrhh").upload(path,file,{upsert:false});
+        if(error)throw new Error("No se pudo subir el archivo. Revisa tu conexión y vuelve a intentarlo.");
+        uploaded={file,path};
+      }
+      msg("Guardando evaluación…");
+      const {data,error}=await pubSb.rpc("rrhh_public_save",{p_token:token,p_decision:decision,p_desempeno:performance,p_comentarios:comments,p_evaluador_nombre:evaluator,p_archivo_url:uploaded.path});
+      if(error||data!==true)throw new Error("No se pudo confirmar el envío. Puedes reintentar; se reutilizará el archivo ya cargado.");
+      complete=true;finish();
+    }catch(e){
+      // Una respuesta perdida puede haber confirmado el registro en el servidor.
+      try{const check=await pubSb.rpc("rrhh_public_get",{p_token:token});if(!check.error&&check.data?.[0]?.estado==="recibida"){complete=true;finish();}}catch(_){}
+      if(!complete)msg(e.message||"No se pudo enviar. Intenta nuevamente.",true);
+    }finally{if(!complete)button.disabled=false;}
+  };
 }
+
 
 function num(v){return Number(v||0)}
 function pctText(v){return Number.isFinite(v)?v.toLocaleString("es-EC",{minimumFractionDigits:1,maximumFractionDigits:1})+"%":"—"}
@@ -1466,25 +2347,657 @@ async function ensureOpsSession(){if(!opsSb)return false;const {data}=await opsS
 async function loadCommissionData(){
   if(!await ensureOpsSession()){commissionsLoaded=false;$("commConnection").className="status-note err";$("commConnection").textContent="Fuente financiera no conectada. Pulsa Actualizar datos para intentar nuevamente.";return;}
   $("commConnection").className="status-note";$("commConnection").textContent="Consultando fuente financiera...";
-  const [pr,inv]=await Promise.all([opsSb.from("vw_dashboard_operaciones").select("*").order("proyecto"),opsSb.from("facturas_servicio").select("*").order("fecha_factura",{ascending:false})]);
+  const [pr,inv,ant]=await Promise.all([opsSb.from("vw_dashboard_operaciones").select("*").order("proyecto"),opsSb.from("facturas_servicio").select("*").order("fecha_factura",{ascending:false}),opsSb.from("anticipos_comisiones").select("*")]);
   if(pr.error||inv.error){$("commConnection").className="status-note err";$("commConnection").textContent="No se pudieron consultar datos financieros: "+esc(pr.error?.message||inv.error?.message||"");return;}
-  opsProjects=pr.data||[];opsInvoices=inv.data||[];commissionsLoaded=true;$("commConnection").className="status-note ok";$("commConnection").textContent=`Fuente financiera conectada · ${opsProjects.length} proyectos · ${opsInvoices.length} facturas.`;
-  $("commProject").innerHTML='<option value="">Selecciona una PO...</option>'+opsProjects.map(x=>`<option value="${esc(x.proyecto)}">PO ${esc(x.proyecto)} · ${esc(x.proyecto_nombre||"")}</option>`).join("");
+  opsProjects=pr.data||[];opsInvoices=inv.data||[];commissionsLoaded=true;
+  anticiposComisiones={};
+  (ant.data||[]).forEach(a=>{if(a.empleado_nombre)anticiposComisiones[a.empleado_nombre.trim().toLowerCase()]=num(a.saldo_anticipo)});
+  const anticipoTexto=ant.error?" (sin datos de anticipo: "+ant.error.message+")":` · ${(ant.data||[]).length} saldos de anticipo`;
+  $("commConnection").className="status-note ok";$("commConnection").textContent=`Fuente financiera conectada · ${opsProjects.length} proyectos · ${opsInvoices.length} facturas${anticipoTexto}.`;
+  const trackedCodes=new Set(opsProjects.map(x=>String(x.proyecto)));
+  const extraCodes={};
+  opsInvoices.forEach(f=>{const code=poFromText(f.orden_venta)||poFromText(f.analitica);if(code&&!trackedCodes.has(code)&&!extraCodes[code])extraCodes[code]=f.cliente||f.analitica||"";});
+  $("commProjectList").innerHTML=opsProjects.map(x=>`<option value="${esc(x.proyecto)}">PO ${esc(x.proyecto)} · ${esc(x.proyecto_nombre||"")}</option>`).join("")+
+    Object.entries(extraCodes).map(([code,cliente])=>`<option value="${esc(code)}">PO ${esc(code)} · ${esc(cliente)}</option>`).join("");
   if(!$("commPeriod").value){const d=new Date();$("commPeriod").value=d.toISOString().slice(0,7)}
   await loadSavedCommissions();
 }
-function invoicesForProject(po){const p=opsProjects.find(x=>String(x.proyecto)===String(po));const needles=[String(po),String(p?.proyecto_nombre||"")].filter(x=>x.length>=3).map(x=>x.toLowerCase());return opsInvoices.filter(f=>{const txt=[f.analitica,f.orden_venta].join(" ").toLowerCase();return needles.some(n=>txt.includes(n))})}
-function renderCommissionProject(){const po=$("commProject").value,p=opsProjects.find(x=>String(x.proyecto)===String(po));if(!p){clearCommissionView();return;}const invs=invoicesForProject(po),bt=$("commBaseType").value;$("commClient").value=[...new Set(invs.map(x=>x.cliente).filter(Boolean))].join(" / ");$("commAnalytic").value=[...new Set(invs.map(x=>x.analitica).filter(Boolean))].join(" / ")||p.proyecto_nombre||"";$("commInvoiceBody").innerHTML=invs.map(f=>{const checked=bt==="cobrado"?num(f.monto_pagado)>0:true;return `<tr><td class="center"><input class="invoice-check" type="checkbox" data-invoice="${f.odoo_id}" ${checked?"checked":""}></td><td>${esc(f.factura||"—")}</td><td>${esc(f.cliente||"—")}</td><td>${esc(f.analitica||"—")}</td><td>${esc(f.vendedor||"—")}</td><td class="right">${money(f.monto_total)}</td><td class="right">${money(f.monto_pagado)}</td><td class="right">${money(f.saldo_pendiente)}</td></tr>`}).join("")||'<tr><td colspan="8">No se encontraron facturas asociadas a esta PO.</td></tr>';document.querySelectorAll("[data-invoice]").forEach(c=>c.onchange=recalcCommission);const expected=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.presupuesto_aterrizado))/num(p.monto_contrato)*100:NaN, real=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.real_ejecutado))/num(p.monto_contrato)*100:NaN;$("commSale").textContent=money(p.monto_contrato);$("commMarginExpected").textContent=pctText(expected);$("commMarginReal").textContent=pctText(real);if(!$("commParticipants").children.length)addParticipant();recalcCommission()}
+function poFromText(t){const m=String(t||"").match(/(\d{3,8})/);return m?String(parseInt(m[1],10)):null}
+function currentCommissionProject(){
+  const raw=$("commProject").value.trim();
+  if(!raw) return null;
+  const poNum=poFromText(raw)||raw;
+  const p=opsProjects.find(x=>String(x.proyecto)===String(poNum));
+  if(p) return p;
+  const invs=invoicesForProject(poNum);
+  if(!invs.length) return null;
+  return {proyecto:poNum,proyecto_nombre:invs[0].cliente||"",monto_contrato:0,presupuesto_aterrizado:0,real_ejecutado:0,_sinControlCostos:true};
+}
+function invoicesForProject(po,p){const poNum=poFromText(po)||po;let invs=opsInvoices.filter(f=>poFromText(f.orden_venta)===poNum||poFromText(f.analitica)===poNum);if(!invs.length){const needles=[String(po),String(p?.proyecto_nombre||"")].filter(x=>x.length>=3).map(x=>x.toLowerCase());invs=opsInvoices.filter(f=>{const txt=[f.analitica,f.orden_venta].join(" ").toLowerCase();return needles.some(n=>txt.includes(n))})}return invs}
+function renderCommissionProject(){const p=currentCommissionProject();if(!p){clearCommissionView();$("commExistingWarning").classList.add("hidden");return;}checkExistingCommissionForPO(p);const invs=invoicesForProject(p.proyecto,p),bt=$("commBaseType").value;$("commClient").value=[...new Set(invs.map(x=>x.cliente).filter(Boolean))].join(" / ")||p.proyecto_nombre||"";$("commAnalytic").value=[...new Set(invs.map(x=>x.analitica).filter(Boolean))].join(" / ")||p.proyecto_nombre||"";$("commInvoiceBody").innerHTML=invs.map(f=>{const checked=bt==="cobrado"?num(f.monto_pagado)>0:true;return `<tr><td class="center"><input class="invoice-check" type="checkbox" data-invoice="${f.odoo_id}" ${checked?"checked":""}></td><td>${esc(f.factura||"—")}</td><td>${esc(f.cliente||"—")}</td><td>${esc(f.analitica||"—")}</td><td>${esc(f.vendedor||"—")}</td><td class="right">${money(f.monto_total)}</td><td class="right">${money(f.monto_pagado)}</td><td class="right">${money(f.saldo_pendiente)}</td></tr>`}).join("")||'<tr><td colspan="8">No se encontraron facturas asociadas a esta PO.</td></tr>';document.querySelectorAll("[data-invoice]").forEach(c=>c.onchange=recalcCommission);const expected=(!p._sinControlCostos&&num(p.monto_contrato))?(num(p.monto_contrato)-num(p.presupuesto_aterrizado))/num(p.monto_contrato)*100:NaN, real=(!p._sinControlCostos&&num(p.monto_contrato))?(num(p.monto_contrato)-num(p.real_ejecutado))/num(p.monto_contrato)*100:NaN;$("commSale").textContent=money(p.monto_contrato);$("commMarginExpected").textContent=pctText(expected);$("commMarginReal").textContent=pctText(real);if(!$("commParticipants").children.length)addParticipant();recalcCommission()}
 function selectedInvoices(){const ids=[...document.querySelectorAll("[data-invoice]:checked")].map(x=>Number(x.dataset.invoice));return opsInvoices.filter(x=>ids.includes(Number(x.odoo_id)))}
-function recalcCommission(){const po=$("commProject").value,p=opsProjects.find(x=>String(x.proyecto)===String(po));if(!p)return;const selected=selectedInvoices(),fact=selected.reduce((a,x)=>a+num(x.monto_total),0),paid=selected.reduce((a,x)=>a+num(x.monto_pagado),0),pend=selected.reduce((a,x)=>a+num(x.saldo_pendiente),0),bt=$("commBaseType").value,base=bt==="venta"?num(p.monto_contrato):bt==="facturado"?fact:paid;$("commInvoiced").textContent=money(fact);$("commPaid").textContent=money(paid);$("commPending").textContent=money(pend);$("commBase").value=money(base);$("commDocs").value=selected.length;$("commGross").value=money(base*num($("commPct").value)/100);document.querySelectorAll(".participant-row").forEach(row=>{const rate=num(row.querySelector(".part-pct").value),gross=base*rate/100,iess=gross*.0945,net=gross-iess;row.querySelector(".part-gross").value=money(gross);row.querySelector(".part-iess").value=money(iess);row.querySelector(".part-net").value=money(net)});const rows=[...document.querySelectorAll(".participant-row")],tg=rows.reduce((a,r)=>a+parseMoney(r.querySelector(".part-gross").value),0),ti=rows.reduce((a,r)=>a+parseMoney(r.querySelector(".part-iess").value),0);$("commTotalGross").textContent=money(tg);$("commTotalIess").textContent=money(ti);$("commTotalNet").textContent=money(tg-ti)}
+function recalcCommission(){const p=currentCommissionProject();if(!p)return;const selected=selectedInvoices(),fact=selected.reduce((a,x)=>a+num(x.monto_total),0),paid=selected.reduce((a,x)=>a+num(x.monto_pagado),0),pend=selected.reduce((a,x)=>a+num(x.saldo_pendiente),0),bt=$("commBaseType").value,base=bt==="venta"?num(p.monto_contrato):bt==="facturado"?fact:paid;$("commInvoiced").textContent=money(fact);$("commPaid").textContent=money(paid);$("commPending").textContent=money(pend);$("commBase").value=money(base);$("commDocs").value=selected.length;$("commGross").value=money(base*num($("commPct").value)/100);document.querySelectorAll(".participant-row").forEach(row=>{const rate=num(row.querySelector(".part-pct").value),gross=base*rate/100,iess=gross*.0945,net=gross-iess,anticipo=num(row.querySelector(".part-anticipo-input")?.value);row.querySelector(".part-gross").value=money(gross);row.querySelector(".part-iess").value=money(iess);row.querySelector(".part-net").value=money(net);const nf=row.querySelector(".part-neto-final");if(nf)nf.textContent="Neto final a pagar: "+money(net-anticipo)});const rows=[...document.querySelectorAll(".participant-row")],tg=rows.reduce((a,r)=>a+parseMoney(r.querySelector(".part-gross").value),0),ti=rows.reduce((a,r)=>a+parseMoney(r.querySelector(".part-iess").value),0);$("commTotalGross").textContent=money(tg);$("commTotalIess").textContent=money(ti);$("commTotalNet").textContent=money(tg-ti)}
 function parseMoney(v){return Number(String(v||"").replace(/[^0-9,.-]/g,"").replace(/\./g,"").replace(",","."))||0}
 function clearCommissionView(){["commClient","commAnalytic","commBase","commGross","commDocs"].forEach(id=>$(id).value="");["commSale","commInvoiced","commPaid","commPending","commTotalGross","commTotalIess","commTotalNet"].forEach(id=>$(id).textContent=money(0));$("commMarginExpected").textContent=$("commMarginReal").textContent="—";$("commInvoiceBody").innerHTML="";$("commParticipants").innerHTML=""}
 function employeeOptions(){const seen=new Set();return allContracts.filter(x=>x.empleado_id&&!seen.has(x.empleado_id)&&seen.add(x.empleado_id)).sort((a,b)=>(a.empleado_nombre||"").localeCompare(b.empleado_nombre||"","es")).map(x=>`<option value="${x.empleado_id}">${esc(x.empleado_nombre)}</option>`).join("")}
-function addParticipant(){const div=document.createElement("div");div.className="participant-row";div.innerHTML=`<div class="field-lite wide-part"><label>Empleado</label><select class="part-emp"><option value="">Selecciona...</option>${employeeOptions()}</select></div><div class="field-lite"><label>% participación</label><input class="part-pct" type="number" step="0.01" min="0" value="${num($("commPct").value)||5}"></div><div class="field-lite"><label>Comisión</label><input class="part-gross" readonly></div><div class="field-lite"><label>IESS 9,45%</label><input class="part-iess" readonly></div><div class="field-lite"><label>Neto</label><input class="part-net" readonly></div><button class="btn-mini" type="button">Quitar</button>`;div.querySelector(".part-pct").oninput=recalcCommission;div.querySelector("button").onclick=()=>{div.remove();recalcCommission()};$("commParticipants").appendChild(div);recalcCommission()}
-async function saveCommission(){const po=$("commProject").value,p=opsProjects.find(x=>String(x.proyecto)===String(po));if(!p){alert("Selecciona una PO.");return;}const participants=[...document.querySelectorAll(".participant-row")].map(r=>{const sel=r.querySelector(".part-emp"),contract=allContracts.find(x=>String(x.empleado_id)===sel.value);return {empleado_id:contract?.empleado_id||null,empleado_nombre:contract?.empleado_nombre||sel.selectedOptions[0]?.textContent||"",pct_participacion:num(r.querySelector(".part-pct").value),comision_bruta:parseMoney(r.querySelector(".part-gross").value),iess_pct:9.45,iess_valor:parseMoney(r.querySelector(".part-iess").value),neto_pagar:parseMoney(r.querySelector(".part-net").value)}}).filter(x=>x.empleado_nombre&&x.empleado_nombre!=="Selecciona...");if(!participants.length){alert("Agrega al menos un empleado.");return;}const selected=selectedInvoices(),fact=selected.reduce((a,x)=>a+num(x.monto_total),0),paid=selected.reduce((a,x)=>a+num(x.monto_pagado),0),pend=selected.reduce((a,x)=>a+num(x.saldo_pendiente),0),bt=$("commBaseType").value,base=bt==="venta"?num(p.monto_contrato):bt==="facturado"?fact:paid,expected=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.presupuesto_aterrizado))/num(p.monto_contrato)*100:null,real=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.real_ejecutado))/num(p.monto_contrato)*100:null,period=($("commPeriod").value||new Date().toISOString().slice(0,7))+"-01";const calc={periodo:period,proyecto:String(po),proyecto_nombre:p.proyecto_nombre||null,cliente:$("commClient").value||null,analitica:$("commAnalytic").value||null,facturas_incluidas:selected.map(x=>x.odoo_id),base_tipo:bt,valor_venta:num(p.monto_contrato),total_facturado:fact,total_cobrado:paid,saldo_pendiente:pend,margen_esperado:expected,margen_real:real,pct_comision:num($("commPct").value),base_comision:base,comision_bruta:participants.reduce((a,x)=>a+x.comision_bruta,0),incluir_pago:$("commInclude").value==="1"};const ins=await sb.from("comisiones_calculos").insert(calc).select().single();if(ins.error){alert(ins.error.message);return;}participants.forEach(x=>x.calculo_id=ins.data.id);const pi=await sb.from("comisiones_participantes").insert(participants);if(pi.error){alert("Cálculo guardado, pero fallaron participantes: "+pi.error.message);return;}alert("Cálculo de comisión guardado.");await loadSavedCommissions()}
-async function loadSavedCommissions(){const {data,error}=await sb.from("comisiones_calculos").select("*,comisiones_participantes(*)").order("creado_en",{ascending:false}).limit(100);if(error){$("commSaved").textContent=error.message;return;}$("commSaved").innerHTML=(data||[]).map(x=>`<div class="saved-card"><b>${dateEC(x.periodo)} · PO ${esc(x.proyecto)} · ${esc(x.cliente||"")}</b><div class="muted" style="margin-top:4px">Base: ${esc(x.base_tipo)} ${money(x.base_comision)} · Comisión: ${money(x.comision_bruta)} · ${x.incluir_pago?"Incluida en pago":"No incluida"}</div><div style="margin-top:5px">${(x.comisiones_participantes||[]).map(p=>`${esc(p.empleado_nombre)}: ${p.pct_participacion}% → <b>${money(p.neto_pagar)}</b>`).join(" · ")}</div></div>`).join("")||"Sin cálculos guardados."}
-function exportCommissionExcel(){const po=$("commProject").value,p=opsProjects.find(x=>String(x.proyecto)===String(po));if(!p)return alert("Selecciona una PO.");const selected=selectedInvoices();const wb=XLSX.utils.book_new();const resumen=[['Orden de Trabajo','PO '+po],['Proyecto',p.proyecto_nombre||''],['Cliente',$("commClient").value],['Cuenta analítica',$("commAnalytic").value],['Valor de Contrato',num(p.monto_contrato)],['Facturado seleccionado',selected.reduce((a,x)=>a+num(x.monto_total),0)],['Cobrado seleccionado',selected.reduce((a,x)=>a+num(x.monto_pagado),0)],['Saldo pendiente',selected.reduce((a,x)=>a+num(x.saldo_pendiente),0)],['Margen esperado',$("commMarginExpected").textContent],['Margen real',$("commMarginReal").textContent],['Base comisión',parseMoney($("commBase").value)]];XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(resumen),'Resumen');const parts=[['Empleado','% Participación','Valor Comisiones','9,45%','Valor Neto a Pagar']];document.querySelectorAll('.participant-row').forEach(r=>parts.push([r.querySelector('.part-emp').selectedOptions[0]?.textContent||'',num(r.querySelector('.part-pct').value),parseMoney(r.querySelector('.part-gross').value),parseMoney(r.querySelector('.part-iess').value),parseMoney(r.querySelector('.part-net').value)]));XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(parts),'Comisiones');const fac=[['Factura','Cliente','Analítica','Vendedor','Facturado','Cobrado','Pendiente'],...selected.map(f=>[f.factura,f.cliente,f.analitica,f.vendedor,num(f.monto_total),num(f.monto_pagado),num(f.saldo_pendiente)])];XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(fac),'Facturas');XLSX.writeFile(wb,`Comisiones_PO_${po}_${$("commPeriod").value||"periodo"}.xlsx`)}
+function addParticipant(prefill){
+  const div=document.createElement("div");
+  div.className="participant-row";
+  div.innerHTML=`<div class="field-lite wide-part"><label>Empleado</label><select class="part-emp"><option value="">Selecciona...</option>${employeeOptions()}</select></div><div class="field-lite"><label>% participación</label><input class="part-pct" type="number" step="0.01" min="0" value="${num($("commPct").value)||5}"></div><div class="field-lite"><label>Comisión</label><input class="part-gross" readonly></div><div class="field-lite"><label>IESS 9,45%</label><input class="part-iess" readonly></div><div class="field-lite"><label>Neto</label><input class="part-net" readonly></div><button class="btn-mini" type="button">Quitar</button><div class="part-anticipo-row" style="grid-column:1/-1;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:-4px"><label style="display:flex;gap:6px;align-items:center">Anticipo a descontar (autocompletado de la cuenta 1010205020208, editable): <input class="part-anticipo-input" type="number" step="0.01" min="0" value="0" style="width:100px;padding:5px;border:1px solid #d7dee9;border-radius:6px"></label><b class="part-neto-final" style="color:var(--navy)"></b></div>`;
+  div.querySelector(".part-pct").oninput=recalcCommission;
+  div.querySelector(".part-anticipo-input").oninput=recalcCommission;
+  div.querySelector(".part-emp").addEventListener("change",e=>autofillAnticipo(e.target));
+  div.querySelector("button").onclick=()=>{div.remove();recalcCommission()};
+  $("commParticipants").appendChild(div);
+  if(prefill){
+    const sel=div.querySelector(".part-emp");
+    [...sel.options].forEach(o=>{if(o.textContent===prefill.nombre)sel.value=o.value;});
+    div.querySelector(".part-pct").value=prefill.pct||5;
+    autofillAnticipo(sel);
+  }
+  recalcCommission();
+}
+function autofillAnticipo(select){
+  const nombre=(select.selectedOptions[0]?.textContent||"").trim().toLowerCase();
+  const saldo=anticiposComisiones[nombre];
+  const input=select.closest(".participant-row").querySelector(".part-anticipo-input");
+  input.value=saldo?saldo.toFixed(2):0;
+  recalcCommission();
+}
+async function saveCommission(){
+  const p=currentCommissionProject();
+  if(!p){alert("Escribe o elige una PO válida (debe tener al menos una factura sincronizada).");return;}
+  const po=p.proyecto;
+  if(!editingCalcId){
+    const yaExiste=(savedCommissions||[]).some(x=>String(x.proyecto)===String(po));
+    if(yaExiste&&!confirm("Ya existe un cálculo guardado para la PO "+po+". ¿Guardar de todas formas otro cálculo?")){return;}
+  }
+  const participants=[...document.querySelectorAll(".participant-row")].map(r=>{
+    const sel=r.querySelector(".part-emp"),contract=allContracts.find(x=>String(x.empleado_id)===sel.value);
+    return {
+      empleado_id:contract?.empleado_id||null,
+      empleado_nombre:contract?.empleado_nombre||sel.selectedOptions[0]?.textContent||"",
+      pct_participacion:num(r.querySelector(".part-pct").value),
+      comision_bruta:parseMoney(r.querySelector(".part-gross").value),
+      iess_pct:9.45,
+      iess_valor:parseMoney(r.querySelector(".part-iess").value),
+      neto_pagar:parseMoney(r.querySelector(".part-net").value)
+    };
+  }).filter(x=>x.empleado_nombre&&x.empleado_nombre!=="Selecciona...");
+  if(!participants.length){alert("Agrega al menos un empleado.");return;}
+  const selected=selectedInvoices(),fact=selected.reduce((a,x)=>a+num(x.monto_total),0),paid=selected.reduce((a,x)=>a+num(x.monto_pagado),0),pend=selected.reduce((a,x)=>a+num(x.saldo_pendiente),0),bt=$("commBaseType").value,base=bt==="venta"?num(p.monto_contrato):bt==="facturado"?fact:paid,expected=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.presupuesto_aterrizado))/num(p.monto_contrato)*100:null,real=num(p.monto_contrato)?(num(p.monto_contrato)-num(p.real_ejecutado))/num(p.monto_contrato)*100:null,period=($("commPeriod").value||new Date().toISOString().slice(0,7))+"-01";
+  const calc={periodo:period,proyecto:String(po),proyecto_nombre:p.proyecto_nombre||null,cliente:$("commClient").value||null,analitica:$("commAnalytic").value||null,facturas_incluidas:selected.map(x=>x.odoo_id),base_tipo:bt,valor_venta:num(p.monto_contrato),total_facturado:fact,total_cobrado:paid,saldo_pendiente:pend,margen_esperado:expected,margen_real:real,pct_comision:num($("commPct").value),base_comision:base,comision_bruta:participants.reduce((a,x)=>a+x.comision_bruta,0),incluir_pago:$("commInclude").value==="1"};
+  if(editingCalcId){
+    const upd=await sb.from("comisiones_calculos").update(calc).eq("id",editingCalcId);
+    if(upd.error){alert(upd.error.message);return;}
+    const delPart=await sb.from("comisiones_participantes").delete().eq("calculo_id",editingCalcId);
+    if(delPart.error){alert("No se pudieron actualizar los participantes: "+delPart.error.message);return;}
+    participants.forEach(x=>x.calculo_id=editingCalcId);
+    const pi=await sb.from("comisiones_participantes").insert(participants);
+    if(pi.error){alert("Cálculo actualizado, pero fallaron participantes: "+pi.error.message);return;}
+    alert("Cálculo actualizado.");
+    editingCalcId=null;
+    $("commSaveBtn").textContent="Guardar cálculo";
+  }else{
+    const ins=await sb.from("comisiones_calculos").insert(calc).select().single();
+    if(ins.error){alert(ins.error.message);return;}
+    participants.forEach(x=>x.calculo_id=ins.data.id);
+    const pi=await sb.from("comisiones_participantes").insert(participants);
+    if(pi.error){alert("Cálculo guardado, pero fallaron participantes: "+pi.error.message);return;}
+    alert("Cálculo de comisión guardado.");
+  }
+  await loadSavedCommissions();
+  checkExistingCommissionForPO(p);
+}
+function editSavedCommission(id){
+  const calc=(savedCommissions||[]).find(x=>x.id===id);
+  if(!calc)return;
+  if(!commissionsLoaded){alert("Espera a que termine de cargar la fuente financiera antes de editar.");return;}
+  editingCalcId=id;
+  $("commProject").value=calc.proyecto;
+  $("commPeriod").value=(calc.periodo||"").slice(0,7);
+  $("commBaseType").value=calc.base_tipo||"cobrado";
+  $("commInclude").value=calc.incluir_pago?"1":"0";
+  renderCommissionProject();
+  const incluidas=new Set((calc.facturas_incluidas||[]).map(Number));
+  document.querySelectorAll("[data-invoice]").forEach(c=>{c.checked=incluidas.has(Number(c.dataset.invoice));});
+  $("commParticipants").innerHTML="";
+  const parts=calc.comisiones_participantes||[];
+  if(parts.length){parts.forEach(pt=>addParticipant({nombre:pt.empleado_nombre,pct:pt.pct_participacion}));}
+  else{addParticipant();}
+  recalcCommission();
+  $("commSaveBtn").textContent="Guardar cambios";
+  document.getElementById("module-comisiones").scrollIntoView({behavior:"smooth"});
+  alert("Editando el cálculo de la PO "+calc.proyecto+". Revisa el anticipo pendiente de cada colaborador en la cuenta 1010205020208 de Odoo y ajústalo antes de guardar los cambios.");
+}
+async function loadSavedCommissions(){
+  const {data,error}=await sb.from("comisiones_calculos").select("*,comisiones_participantes(*)").order("creado_en",{ascending:false}).limit(100);
+  if(error){$("commSaved").textContent=error.message;return;}
+  savedCommissions=data||[];
+  renderSavedCommissions();
+}
+function commissionCardHTML(x){
+  return `<div class="saved-card">
+    <div class="saved-card-actions">
+      <button class="btn-mini blue" data-edit-calc="${x.id}">Editar</button>
+      <button class="btn-mini danger" data-delete-calc="${x.id}">Eliminar</button>
+    </div>
+    <b>${dateEC(x.periodo)} · PO ${esc(x.proyecto)} · ${esc(x.cliente||"")}</b>
+    <div class="muted" style="margin-top:4px">Base: ${esc(x.base_tipo)} ${money(x.base_comision)} · Comisión: ${money(x.comision_bruta)} · ${x.incluir_pago?"Incluida en pago":"No incluida"}</div>
+    <div style="margin-top:5px">${(x.comisiones_participantes||[]).map(p=>`${esc(p.empleado_nombre)}: ${p.pct_participacion}% → <b>${money(p.neto_pagar)}</b>`).join(" · ")}</div>
+  </div>`;
+}
+function renderSavedCommissions(){
+  const pendientes=(savedCommissions||[]).filter(x=>!x.incluir_pago);
+  const pagadas=(savedCommissions||[]).filter(x=>x.incluir_pago);
+  $("commSaved").innerHTML=pendientes.map(commissionCardHTML).join("")||"Sin cálculos guardados.";
+  $("commPaidList").innerHTML=pagadas.map(commissionCardHTML).join("")||"Sin comisiones pagadas registradas.";
+  const totalPagado=pagadas.reduce((a,x)=>a+(x.comisiones_participantes||[]).reduce((b,p)=>b+num(p.neto_pagar),0),0);
+  $("commPaidTotal").textContent=money(totalPagado);
+  document.querySelectorAll("[data-delete-calc]").forEach(btn=>{
+    btn.addEventListener("click",()=>deleteSavedCommission(btn.dataset.deleteCalc));
+  });
+  document.querySelectorAll("[data-edit-calc]").forEach(btn=>{
+    btn.addEventListener("click",()=>editSavedCommission(btn.dataset.editCalc));
+  });
+}
+async function deleteSavedCommission(id){
+  if(!confirm("¿Eliminar este cálculo de comisión guardado? Esta acción no se puede deshacer."))return;
+  const dp=await sb.from("comisiones_participantes").delete().eq("calculo_id",id);
+  if(dp.error){alert("No se pudo eliminar (participantes): "+dp.error.message);return;}
+  const dc=await sb.from("comisiones_calculos").delete().eq("id",id);
+  if(dc.error){alert("No se pudo eliminar el cálculo: "+dc.error.message);return;}
+  if(editingCalcId===id){editingCalcId=null;$("commSaveBtn").textContent="Guardar cálculo";}
+  await loadSavedCommissions();
+  const p=currentCommissionProject();
+  if(p) checkExistingCommissionForPO(p);
+}
+function newCommissionCalc(){
+  $("commProject").value="";
+  clearCommissionView();
+  $("commExistingWarning").classList.add("hidden");
+  editingCalcId=null;
+  $("commSaveBtn").textContent="Guardar cálculo";
+  $("commProject").focus();
+}
+function checkExistingCommissionForPO(p){
+  const existentes=(savedCommissions||[]).filter(x=>String(x.proyecto)===String(p.proyecto)&&x.id!==editingCalcId);
+  const box=$("commExistingWarning");
+  if(!existentes.length){box.classList.add("hidden");box.innerHTML="";return;}
+  box.classList.remove("hidden");
+  box.innerHTML="⚠ Ya existe"+(existentes.length>1?"n "+existentes.length+" cálculos":" un cálculo")+" guardado(s) para la PO "+esc(p.proyecto)+":<br>"+
+    existentes.map(x=>`${dateEC(x.periodo)} · Comisión bruta ${money(x.comision_bruta)} · ${x.incluir_pago?"<b>ya incluida en pago</b>":"no incluida en pago aún"}`).join("<br>");
+}
+function exportCommissionExcel(){const p=currentCommissionProject();if(!p)return alert("Escribe o elige una PO válida.");const po=p.proyecto;const selected=selectedInvoices();const wb=XLSX.utils.book_new();const resumen=[['Orden de Trabajo','PO '+po],['Proyecto',p.proyecto_nombre||''],['Cliente',$("commClient").value],['Cuenta analítica',$("commAnalytic").value],['Valor de Contrato',num(p.monto_contrato)],['Facturado seleccionado',selected.reduce((a,x)=>a+num(x.monto_total),0)],['Cobrado seleccionado',selected.reduce((a,x)=>a+num(x.monto_pagado),0)],['Saldo pendiente',selected.reduce((a,x)=>a+num(x.saldo_pendiente),0)],['Margen esperado',$("commMarginExpected").textContent],['Margen real',$("commMarginReal").textContent],['Base comisión',parseMoney($("commBase").value)]];XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(resumen),'Resumen');const parts=[['Empleado','% Participación','Valor Comisiones','9,45%','Valor Neto a Pagar']];document.querySelectorAll('.participant-row').forEach(r=>parts.push([r.querySelector('.part-emp').selectedOptions[0]?.textContent||'',num(r.querySelector('.part-pct').value),parseMoney(r.querySelector('.part-gross').value),parseMoney(r.querySelector('.part-iess').value),parseMoney(r.querySelector('.part-net').value)]));XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(parts),'Comisiones');const fac=[['Factura','Cliente','Analítica','Vendedor','Facturado','Cobrado','Pendiente'],...selected.map(f=>[f.factura,f.cliente,f.analitica,f.vendedor,num(f.monto_total),num(f.monto_pagado),num(f.saldo_pendiente)])];XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(fac),'Facturas');XLSX.writeFile(wb,`Comisiones_PO_${po}_${$("commPeriod").value||"periodo"}.xlsx`)}
 
+/* ============================================================
+   IMPRESIÓN — comprobante de comisión con membrete
+============================================================ */
+function logoSrc(){return document.querySelector(".header-logo, .brand-logo")?.src || ""}
+function printCommission(){
+  const p = currentCommissionProject();
+  if(!p){alert("Escribe o elige una PO con datos cargados antes de generar el reporte.");return;}
+  const po = p.proyecto;
+  const invs = selectedInvoices();
+  const rows = [...document.querySelectorAll(".participant-row")].map(r=>{
+    const nombre = r.querySelector(".part-emp").selectedOptions[0]?.textContent || "—";
+    const net = r.querySelector(".part-net").value;
+    const anticipo = num(r.querySelector(".part-anticipo-input")?.value);
+    return {
+      nombre,
+      pct: r.querySelector(".part-pct").value,
+      gross: r.querySelector(".part-gross").value,
+      iess: r.querySelector(".part-iess").value,
+      net,
+      anticipo,
+      neto_final: parseMoney(net) - anticipo
+    };
+  }).filter(r=>r.nombre && r.nombre!=="Selecciona...");
+  const hoy = new Date().toLocaleDateString("es-EC",{year:"numeric",month:"long",day:"numeric"});
+  const pendiente = $("commPending").textContent;
+  $("printArea").innerHTML = `
+    <div class="print-header">
+      <img src="${logoSrc()}" alt="ENERGYCONTROL S.A.">
+      <div>
+        <h1>ENERGYCONTROL S.A.</h1>
+        <p>Comprobante generado el ${hoy}</p>
+      </div>
+    </div>
+    <div class="print-title">Comprobante de cálculo de comisión</div>
+    <div class="print-meta">
+      <div><b>PO / Proyecto:</b> ${esc(po)}</div>
+      <div><b>Periodo:</b> ${esc($("commPeriod").value || "—")}</div>
+      <div><b>Cliente:</b> ${esc($("commClient").value || "—")}</div>
+      <div><b>Cuenta analítica:</b> ${esc($("commAnalytic").value || "—")}</div>
+      <div><b>Base para comisión:</b> ${esc($("commBaseType").selectedOptions[0]?.textContent || "—")}</div>
+      <div><b>Incluir en pago:</b> ${esc($("commInclude").selectedOptions[0]?.textContent || "—")}</div>
+    </div>
+    <div class="print-kpis">
+      <div><div class="label">Valor de venta</div><div class="value">${esc($("commSale").textContent)}</div></div>
+      <div><div class="label">Facturado</div><div class="value">${esc($("commInvoiced").textContent)}</div></div>
+      <div><div class="label">Cobrado</div><div class="value">${esc($("commPaid").textContent)}</div></div>
+      <div><div class="label">Saldo pendiente</div><div class="value warn">${esc(pendiente)}</div></div>
+      <div><div class="label">Base comisionable</div><div class="value">${esc($("commBase").value || "—")}</div></div>
+    </div>
+    <div class="print-section-title">Facturas / cobros incluidos</div>
+    <table class="print-table">
+      <thead><tr><th>Factura</th><th>Cliente</th><th>Analítica</th><th>Vendedor</th><th class="num">Facturado</th><th class="num">Cobrado</th><th class="num">Pendiente</th></tr></thead>
+      <tbody>
+        ${invs.map(f=>`<tr><td>${esc(f.factura||"—")}</td><td>${esc(f.cliente||"—")}</td><td>${esc(f.analitica||"—")}</td><td>${esc(f.vendedor||"—")}</td><td class="num">${money(f.monto_total)}</td><td class="num">${money(f.monto_pagado)}</td><td class="num">${money(f.saldo_pendiente)}</td></tr>`).join("") || '<tr><td colspan="7">Sin facturas incluidas en el cálculo.</td></tr>'}
+      </tbody>
+    </table>
+    <div class="print-section-title">Participación por colaborador</div>
+    <table class="print-table">
+      <thead><tr><th>Colaborador</th><th class="num">% Participación</th><th class="num">Comisión bruta</th><th class="num">IESS 9,45%</th><th class="num">Neto calculado</th><th class="num">Anticipo pendiente</th><th class="num">Neto a pagar</th></tr></thead>
+      <tbody>
+        ${rows.map(r=>`<tr><td>${esc(r.nombre)}</td><td class="num">${esc(r.pct)}%</td><td class="num">${esc(r.gross)}</td><td class="num">${esc(r.iess)}</td><td class="num">${esc(r.net)}</td><td class="num">${r.anticipo?money(r.anticipo):"—"}</td><td class="num"><b>${money(r.neto_final)}</b></td></tr>`).join("") || '<tr><td colspan="7">Sin colaboradores agregados.</td></tr>'}
+      </tbody>
+    </table>
+    ${rows.some(r=>r.anticipo>0) ? '<div class="status-note-print" style="font-size:11px;color:var(--muted);margin:-6px 0 14px">Anticipo ingresado manualmente por el usuario según la cuenta contable 1010205020208 (Anticipo Comisiones Empleados) de Odoo.</div>' : ''}
+    <div class="print-totals">
+      <div>Comisión bruta total: <b>${esc($("commTotalGross").textContent)}</b></div>
+      <div>IESS: <b>${esc($("commTotalIess").textContent)}</b></div>
+      <div>Anticipos a descontar: <b>${money(rows.reduce((a,r)=>a+r.anticipo,0))}</b></div>
+      <div>Neto total a pagar: <b>${money(rows.reduce((a,r)=>a+r.neto_final,0))}</b></div>
+    </div>
+    <div class="print-sign">
+      <div>Elaborado por</div>
+      <div>Autorizado por</div>
+    </div>
+    <div class="print-footer">ENERGYCONTROL S.A. · Documento interno de referencia, no constituye rol de pagos.</div>
+  `;
+  window.print();
+}
+
+/* ============================================================
+   CERTIFICADOS LABORALES
+============================================================ */
+function certificateText(d){
+  if(d.inactivo){
+    const base = `Por medio del presente, certifico que ${d.treatment} ${d.nombre}, con cédula de ciudadanía No. ${d.id}, prestó sus servicios en la compañía ENERGYCONTROL S.A., con RUC No. 0992284714001, desde el ${d.startLong} hasta el ${d.endLong}, desempeñando el cargo de ${d.cargo}.`;
+    return base+(d.tipo==="con_sueldo" ? ` Su última remuneración mensual fue de USD ${d.salario}.` : "");
+  }
+  const base = `Por medio del presente, certifico que ${d.treatment} ${d.nombre}, con cédula de ciudadanía No. ${d.id}, presta sus servicios en la compañía ENERGYCONTROL S.A., con RUC No. 0992284714001, desde el ${d.startLong}, desempeñando el cargo de ${d.cargo}.`;
+  return base+(d.tipo==="con_sueldo" ? ` Percibe una remuneración mensual de USD ${d.salario}.` : "");
+}
+function certificateMarkup(d){
+  const logo=document.querySelector("#publicEvalView img")?.src||logoSrc();
+  return `<div style="font-family:'Century Gothic',Arial,sans-serif;font-size:11pt;color:#000;line-height:1.5">
+    <table style="width:100%;border-collapse:collapse;margin-bottom:30pt"><tr>
+      <td style="width:46%;vertical-align:middle"><img src="${logo}" alt="ENERGYCONTROL" width="210" style="width:210px;max-width:100%;height:auto"></td>
+      <td style="font-size:8pt;text-align:right;vertical-align:middle;line-height:1.35">Oficinas: Cdla. Urdesa Central. Bálsamos Sur 118<br>Y calle Única, manzana 22, solar 1.<br>Edificio Sem Group Medialab.<br>Guayaquil, Ecuador<br>Teléfono: (593-4) 3726779 - 0994104356<br>E-mail: info@energycontrolsa.com<br>R.U.C. No. 0992284714001</td>
+    </tr></table>
+    <p style="text-align:right;margin:0 0 34pt">${esc(d.ciudad)}, ${esc(d.hoy)}</p>
+    <h1 style="font-family:'Century Gothic',Arial,sans-serif;font-size:24pt;font-weight:bold;text-align:center;color:#000;margin:0 0 32pt">CERTIFICADO</h1>
+    <p style="text-align:justify;margin:0 0 18pt">${esc(certificateText(d))}</p>
+    <p style="text-align:justify;margin:0 0 30pt">El presente certificado se expide a solicitud de la persona interesada, para los fines que estime pertinentes.</p>
+    <p style="margin:0 0 54pt">Atentamente,</p>
+    <p style="margin:0"><b>${esc(d.signer)}</b><br>${esc(d.signerJob)}${d.signerId?'<br>C.C. '+esc(d.signerId):''}<br>ENERGYCONTROL S.A.</p>
+    <p style="font-size:9pt;color:#555;text-align:center;margin:45pt 0 0">INGENIERÍA · SERVICIO · REPUESTOS · FABRICACIÓN</p>
+  </div>`;
+}
+function buildCertEmployeeOptions(){
+  const prev = $("certEmployee").value;
+  const seen = new Set();
+  const activos = allContracts
+    .filter(x=>x.empleado_id && !seen.has(x.empleado_id) && seen.add(x.empleado_id))
+    .sort((a,b)=>(a.empleado_nombre||"").localeCompare(b.empleado_nombre||"","es"));
+  const inactivos = allInactivos.slice()
+    .sort((a,b)=>(a.empleado_nombre||"").localeCompare(b.empleado_nombre||"","es"));
+  $("certEmployee").innerHTML = '<option value="">Selecciona un colaborador...</option>' +
+    (activos.length ? '<optgroup label="Activos">' + activos.map(x=>`<option value="A:${x.empleado_id}">${esc(x.empleado_nombre)}</option>`).join("") + '</optgroup>' : "") +
+    (inactivos.length ? '<optgroup label="Inactivos">' + inactivos.map(x=>`<option value="I:${x.empleado_id}">${esc(x.empleado_nombre)} (salida ${dateEC(x.fecha_salida)})</option>`).join("") + '</optgroup>' : "");
+  if(prev) $("certEmployee").value = prev;
+}
+function certSelected(){
+  const [tipo,id] = String($("certEmployee").value||"").split(":");
+  if(!id) return null;
+  if(tipo==="I"){
+    const x = allInactivos.find(c=>String(c.empleado_id)===id);
+    return x ? {inactivo:true,nombre:x.empleado_nombre,cargo:x.cargo,salario:x.ultimo_sueldo,inicio:x.fecha_ingreso,fin:x.fecha_salida} : null;
+  }
+  const x = allContracts.find(c=>String(c.empleado_id)===id);
+  return x ? {inactivo:false,nombre:x.empleado_nombre,cargo:x.cargo,salario:x.salario,inicio:x.fecha_inicio,fin:""} : null;
+}
+function validCertificate(){
+  const s = certSelected();
+  if(!s){alert("Selecciona un colaborador.");return false;}
+  for(const id of ["certId","certJob","certStart","certCity","certSigner","certSignerJob"]){if(!$(id).value.trim()){alert("Completa cédula, cargo, fecha de ingreso, ciudad y datos del firmante.");$(id).focus();return false;}}
+  if(s.inactivo){
+    if(!$("certEnd").value){alert("Para un colaborador inactivo ingresa la fecha de salida.");$("certEnd").focus();return false;}
+    if($("certEnd").value < $("certStart").value){alert("La fecha de salida no puede ser anterior a la fecha de ingreso.");$("certEnd").focus();return false;}
+  }
+  if($("certType").value==="con_sueldo"&&(!$("certSalary").value||Number($("certSalary").value)<=0)){alert("Ingresa un sueldo mensual válido.");return false;}
+  return true;
+}
+function longDate(iso){
+  if(!iso) return "—";
+  const meses=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  const d=new Date(iso+"T12:00:00");
+  return `${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
+}
+function fillCertEmployee(){
+  const s = certSelected();
+  $("certEnd").value = "";
+  if(!s) return;
+  $("certJob").value = s.cargo || "";
+  $("certSalary").value = s.salario || "";
+  $("certStart").value = s.inicio || "";
+  $("certEnd").value = s.fin || "";
+}
+function certificateData(){
+  const s = certSelected();
+  return {
+    nombre:s?.nombre||"",
+    inactivo:!!s?.inactivo,
+    id:$("certId").value,
+    cargo:$("certJob").value,
+    startLong:longDate($("certStart").value),
+    endLong:longDate($("certEnd").value),
+    salario:Number($("certSalary").value||0).toLocaleString("es-EC",{minimumFractionDigits:2,maximumFractionDigits:2}),
+    ciudad:$("certCity").value,
+    treatment:$("certTreatment").value,
+    signer:$("certSigner").value,
+    signerJob:$("certSignerJob").value,
+    signerId:$("certSignerId").value.trim(),
+    tipo:$("certType").value,
+    hoy: new Date().toLocaleDateString("es-EC",{year:"numeric",month:"long",day:"numeric"})
+  };
+}
+function previewCertificate(){
+  if(!validCertificate())return;
+  $("certPreview").innerHTML=certificateMarkup(certificateData());
+  $("certPreview").classList.add("show");
+}
+function downloadCertificate(){
+  if(!validCertificate())return;
+  const d=certificateData();
+  // MHTML incluye el logo dentro del documento de Word, sin imágenes externas.
+  const markup=certificateMarkup(d);
+  const image=markup.match(/src="(data:image\/png;base64,([^"]+))"/);
+  const boundary="----EnergycontrolCertificado";
+  const html='<!DOCTYPE html><html><head><meta charset="utf-8"><style>@page{size:8.5in 11in;margin:0.89in 1.18in 0.79in}body{margin:0}</style></head><body>'+ (image?markup.replace(image[1],'file:///logo-energycontrol.png'):markup)+'</body></html>';
+  const encoded=btoa(unescape(encodeURIComponent(html))).match(/.{1,76}/g).join("\r\n");
+  let content='MIME-Version: 1.0\r\nContent-Type: multipart/related; boundary="'+boundary+'"\r\n\r\n--'+boundary+'\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\nContent-Location: file:///certificado.htm\r\n\r\n'+encoded+'\r\n';
+  if(image)content+='--'+boundary+'\r\nContent-Type: image/png\r\nContent-Transfer-Encoding: base64\r\nContent-Location: file:///logo-energycontrol.png\r\n\r\n'+image[2].match(/.{1,76}/g).join("\r\n")+'\r\n';
+  content+='--'+boundary+'--\r\n';
+  const blob=new Blob([content],{type:"application/msword"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=`Certificado_Laboral_${d.nombre.replace(/[^a-z0-9]+/gi,"_")}.doc`;
+  a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+/* ============================================================
+   ROLES DE PAGO
+============================================================ */
+async function loadRoles(){
+  $("rolLoading").classList.remove("hidden");$("rolTable").classList.add("hidden");$("rolEmpty").classList.add("hidden");
+  const {data,error}=await sb.from("roles_pago").select("*").order("periodo_desde",{ascending:false}).limit(3000);
+  $("rolLoading").classList.add("hidden");
+  if(error){$("rolEmpty").textContent="No se pudieron cargar los roles de pago: "+error.message;$("rolEmpty").classList.remove("hidden");return;}
+  allRoles=data||[];rolesLoaded=true;
+  $("rolTotal").textContent=allRoles.length;
+  $("rolEmployees").textContent=new Set(allRoles.map(x=>x.empleado_nombre).filter(Boolean)).size;
+  const periods=allRoles.map(x=>x.periodo_desde).filter(Boolean).sort();
+  $("rolLatest").textContent=periods.length?dateEC(periods[periods.length-1]):"—";
+  renderRoles();
+}
+function renderRoles(){
+  const emp=$("rolEmployeeFilter").value, mes=$("rolMonthFilter").value;
+  const rows=allRoles.filter(x=>{
+    if(emp && x.empleado_nombre!==emp) return false;
+    if(mes && String(x.periodo_desde||"").slice(0,7)!==mes) return false;
+    return true;
+  });
+  $("rolCount").textContent=`${rows.length} registros`;
+  if(!rows.length){$("rolTable").classList.add("hidden");$("rolEmpty").classList.remove("hidden");return;}
+  $("rolEmpty").classList.add("hidden");$("rolTable").classList.remove("hidden");
+  $("rolBody").innerHTML=rows.map(r=>`<tr><td>${dateEC(r.periodo_desde)} — ${dateEC(r.periodo_hasta)}</td><td>${esc(r.empleado_nombre||"—")}</td><td>${esc(r.area||"—")}</td><td>${esc(r.cargo||"—")}</td><td>${money(r.total_ingresos)}</td><td>${money(r.total_egresos)}</td><td>${money(r.neto_recibir)}</td></tr>`).join("");
+}
+
+/* ============================================================
+   COSTO DE PERSONAL — ESTIMACIÓN GERENCIAL
+============================================================ */
+function normalizeCostDepartment(value){
+  const parts=String(value||"Sin departamento").split("/").map(x=>x.trim()).filter(Boolean);
+  const unique=[...new Set(parts)];
+  return unique.join(" / ")||"Sin departamento";
+}
+
+function consolidateMonthlyCosts(month){
+  const grouped=new Map();
+  allRoles.filter(r=>String(r.periodo_desde||"").slice(0,7)===month).forEach(r=>{
+    const employee=r.odoo_employee_id||r.identificacion||r.empleado_nombre;
+    if(!employee)return;
+    const key=String(employee);
+    const current=grouped.get(key)||{
+      employee:r.empleado_nombre||"Sin nombre",department:normalizeCostDepartment(r.area),
+      maxSalary:0,maxCommissions:0,maxOvertime:0,maxReserve:0,maxIncome:0,areaIncome:-1,pctCosto:null,pctIncome:-1
+    };
+    const income=Number(r.total_ingresos||0);
+    current.employee=r.empleado_nombre||current.employee;
+    if(r.area && income>=current.areaIncome){current.department=normalizeCostDepartment(r.area);current.areaIncome=income;}
+    current.maxSalary=Math.max(current.maxSalary,Number(r.sueldo_ganado||0));
+    current.maxCommissions=Math.max(current.maxCommissions,Number(r.comisiones||0));
+    current.maxOvertime=Math.max(current.maxOvertime,Number(r.horas_extras||0));
+    current.maxReserve=Math.max(current.maxReserve,Number(r.fondos_reserva||0));
+    current.maxIncome=Math.max(current.maxIncome,income);
+    if(r.porcentaje_costo!==null && r.porcentaje_costo!==undefined && r.porcentaje_costo!=='' && income>=current.pctIncome){current.pctCosto=Math.min(100,Math.max(0,Number(r.porcentaje_costo)));current.pctIncome=income;}
+    grouped.set(key,current);
+  });
+  return [...grouped.values()];
+}
+
+function calculateEmployeeCost(row,sbu,iessRate){
+  const remuneration=Math.max(
+    row.maxIncome-row.maxReserve,
+    row.maxSalary+row.maxCommissions+row.maxOvertime
+  );
+  const iess=remuneration*iessRate/100;
+  const thirteenth=remuneration/12;
+  const fourteenth=sbu/12;
+  const vacations=remuneration/24;
+  const reserve=row.maxReserve;
+  const benefits=thirteenth+fourteenth+vacations+reserve;
+  return {...row,remuneration,iess,thirteenth,fourteenth,vacations,reserve,benefits,total:remuneration+iess+benefits};
+}
+
+function calculateStructuralCost(row,sbu,iessRate){
+  const remuneration=Math.max(
+    0,
+    row.maxIncome-row.maxReserve-row.maxCommissions,
+    row.maxSalary+row.maxOvertime
+  );
+  const iess=remuneration*iessRate/100;
+  const thirteenth=remuneration/12;
+  const fourteenth=sbu/12;
+  const vacations=remuneration/24;
+  const reserve=row.maxReserve;
+  const benefits=thirteenth+fourteenth+vacations+reserve;
+  return {...row,remuneration,iess,thirteenth,fourteenth,vacations,reserve,benefits,total:remuneration+iess+benefits};
+}
+
+function withAccountSplit(row){
+  if(row.pctCosto===null||row.pctCosto===undefined||isNaN(row.pctCosto))return {...row,costo:0,gasto:0,sinClasificar:row.total};
+  const costo=row.total*row.pctCosto/100;
+  return {...row,costo,gasto:row.total-costo,sinClasificar:0};
+}
+
+function costForView(row,sbu,iessRate,view){
+  const fixed=calculateStructuralCost(row,sbu,iessRate);
+  if(view!=='total')return withAccountSplit({...fixed,salaries:fixed.remuneration,commissions:0});
+  const full=calculateEmployeeCost(row,sbu,iessRate);
+  return withAccountSplit({...full,salaries:fixed.remuneration,commissions:full.remuneration-fixed.remuneration});
+}
+
+function accountTag(row){
+  if(row.pctCosto===null||row.pctCosto===undefined||isNaN(row.pctCosto))return '<span class="acc-tag acc-sin">Sin clasificar</span>';
+  if(row.pctCosto>=99.5)return '<span class="acc-tag acc-costo">501 Costo</span>';
+  if(row.pctCosto<=0.5)return '<span class="acc-tag acc-gasto">502 Gasto</span>';
+  return `<span class="acc-tag acc-mix">Mixto ${Math.round(row.pctCosto)}/${Math.round(100-row.pctCosto)}</span>`;
+}
+
+function compactMoney(value){
+  return '$'+new Intl.NumberFormat('es-EC',{notation:'compact',maximumFractionDigits:1}).format(Number(value||0));
+}
+
+function renderCostTrend(){
+  const selectedMonth=$('costMonthFilter').value;
+  if(!selectedMonth)return;
+  const year=selectedMonth.slice(0,4);
+  const department=$('costDepartmentFilter').value;
+  const employee=$('costEmployeeFilter').value;
+  const sbu=Math.max(0,Number($('costSbu').value||0));
+  const iessRate=Math.max(0,Number($('costIessRate').value||0));
+  const metric=$('costTrendMetric').value;
+  const view=$('costView').value;
+  const notes={
+    salaries:'Sueldo ganado + horas extras, sin comisiones: úsalo para ver cómo cambian los sueldos mes a mes.',
+    cost:view==='total'?'Costo total con comisiones (sueldos + comisiones + IESS + beneficios).':'Costo fijo sin comisiones (sueldos + IESS + beneficios).',
+    headcount:'Colaboradores con rol de pago en cada mes.'
+  };
+  $('costTrendNote').textContent='Evolución desde enero hasta el periodo seleccionado. '+(notes[metric]||'');
+  const labels=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const available=new Set(allRoles.map(r=>String(r.periodo_desde||'').slice(0,7)));
+  const lastIndex=Math.max(0,Number(selectedMonth.slice(5,7))-1);
+  const points=[];
+  for(let index=0;index<=lastIndex;index++){
+    const month=`${year}-${String(index+1).padStart(2,'0')}`;
+    if(!available.has(month))continue;
+    const rows=consolidateMonthlyCosts(month)
+      .filter(x=>(!department||x.department===department)&&(!employee||x.employee===employee))
+      .map(x=>costForView(x,sbu,iessRate,view));
+    const value=metric==='headcount'?rows.length:rows.reduce((sum,row)=>sum+(metric==='cost'?row.total:row.salaries),0);
+    points.push({month,label:labels[index],value});
+  }
+
+  if(!points.length){
+    $('costTrendSummary').innerHTML='';
+    $('costTrendChart').innerHTML='<div class="cost-trend-empty">No hay datos mensuales para esta selección.</div>';
+    return;
+  }
+
+  const first=points[0].value,last=points[points.length-1].value,change=last-first;
+  const pct=first?change/first*100:0;
+  const display=value=>metric==='headcount'?String(Math.round(value)):money(value);
+  const changeText=`${change>=0?'+':''}${metric==='headcount'?Math.round(change):money(change)} (${change>=0?'+':''}${pct.toFixed(1)}%)`;
+  $('costTrendSummary').innerHTML=`<div class="cost-trend-chip"><span>${points[0].label}</span> <b>${display(first)}</b></div><div class="cost-trend-chip"><span>${points[points.length-1].label}</span> <b>${display(last)}</b></div><div class="cost-trend-chip ${change>0?'positive':change<0?'negative':''}"><span>Cambio</span> <b>${changeText}</b></div>`;
+
+  const width=840,height=300,left=66,right=24,top=38,bottom=48;
+  const chartWidth=width-left-right,chartHeight=height-top-bottom;
+  const values=points.map(x=>x.value);
+  let min=Math.min(...values),max=Math.max(...values);
+  const padding=Math.max((max-min)*0.18,metric==='headcount'?2:max*0.08,1);
+  min=Math.max(0,min-padding);max=max+padding;
+  if(max===min)max=min+1;
+  const x=index=>left+(points.length===1?chartWidth/2:index*chartWidth/(points.length-1));
+  const y=value=>top+(max-value)/(max-min)*chartHeight;
+  const line=points.map((point,index)=>`${index?'L':'M'} ${x(index).toFixed(1)} ${y(point.value).toFixed(1)}`).join(' ');
+  const area=`${line} L ${x(points.length-1).toFixed(1)} ${top+chartHeight} L ${x(0).toFixed(1)} ${top+chartHeight} Z`;
+  const ticks=Array.from({length:5},(_,i)=>min+(max-min)*(4-i)/4);
+  const tickLabel=value=>metric==='headcount'?String(Math.round(value)):compactMoney(value);
+  const grid=ticks.map(value=>`<line x1="${left}" y1="${y(value)}" x2="${width-right}" y2="${y(value)}" stroke="#e6ebf2" stroke-width="1"/><text x="${left-10}" y="${y(value)+4}" text-anchor="end" font-size="11" fill="#718096">${tickLabel(value)}</text>`).join('');
+  const dots=points.map((point,index)=>`<g><circle cx="${x(index)}" cy="${y(point.value)}" r="5" fill="#7db900" stroke="#fff" stroke-width="3"><title>${point.label}: ${display(point.value)}</title></circle><text x="${x(index)}" y="${Math.max(15,y(point.value)-13)}" text-anchor="middle" font-size="11" font-weight="700" fill="#12325b">${metric==='headcount'?Math.round(point.value):compactMoney(point.value)}</text><text x="${x(index)}" y="${height-18}" text-anchor="middle" font-size="12" font-weight="700" fill="#52647a">${point.label}</text></g>`).join('');
+  $('costTrendChart').innerHTML=`<svg viewBox="0 0 ${width} ${height}" aria-hidden="true"><defs><linearGradient id="costTrendArea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#a5cf39" stop-opacity=".28"/><stop offset="100%" stop-color="#a5cf39" stop-opacity=".02"/></linearGradient></defs>${grid}<path d="${area}" fill="url(#costTrendArea)"/><path d="${line}" fill="none" stroke="#6f9f00" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>${dots}</svg>`;
+}
+
+function buildCostFilters(){
+  const months=[...new Set(allRoles.map(r=>String(r.periodo_desde||"").slice(0,7)).filter(x=>/^\d{4}-\d{2}$/.test(x)))].sort().reverse();
+  if(!$('costMonthFilter').value && months.length)$('costMonthFilter').value=months[0];
+  const month=$('costMonthFilter').value;
+  const base=consolidateMonthlyCosts(month);
+  const oldDepartment=$('costDepartmentFilter').value;
+  const departments=[...new Set(base.map(x=>x.department))].sort((a,b)=>a.localeCompare(b,'es'));
+  $('costDepartmentFilter').innerHTML='<option value="">Todos los departamentos</option>'+departments.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  if(departments.includes(oldDepartment))$('costDepartmentFilter').value=oldDepartment;
+  buildCostEmployeeFilter(base);
+}
+
+function buildCostEmployeeFilter(base=consolidateMonthlyCosts($('costMonthFilter').value)){
+  const department=$('costDepartmentFilter').value;
+  const oldEmployee=$('costEmployeeFilter').value;
+  const employees=base.filter(x=>!department||x.department===department).map(x=>x.employee).sort((a,b)=>a.localeCompare(b,'es'));
+  $('costEmployeeFilter').innerHTML='<option value="">Todos los colaboradores</option>'+employees.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  if(employees.includes(oldEmployee))$('costEmployeeFilter').value=oldEmployee;
+}
+
+async function loadCosts(){
+  $('costLoading').classList.remove('hidden');$('costError').classList.add('hidden');$('costContent').classList.add('hidden');
+  if(!rolesLoaded)await loadRoles();
+  $('costLoading').classList.add('hidden');
+  if(!rolesLoaded){$('costError').textContent='No fue posible cargar la información privada de roles de pago. Verifica tu acceso de RRHH.';$('costError').classList.remove('hidden');return;}
+  buildCostFilters();
+  costsLoaded=true;
+  renderCosts();
+}
+
+let costSelectedDept='';
+function selectCostDept(name){
+  costSelectedDept=costSelectedDept===name?'':name;
+  renderCosts();
+  if(costSelectedDept){const t=$('costEmployeeBody');if(t)t.closest('section').scrollIntoView({behavior:'smooth',block:'start'});}
+}
+
+function renderCosts(){
+  const month=$('costMonthFilter').value;
+  const department=$('costDepartmentFilter').value;
+  const employee=$('costEmployeeFilter').value;
+  const sbu=Math.max(0,Number($('costSbu').value||0));
+  const iessRate=Math.max(0,Number($('costIessRate').value||0));
+  const view=$('costView').value;
+  const isTotal=view==='total';
+  $('costContent').classList.toggle('view-fixed',!isTotal);
+  $('costTotalLabel').textContent=isTotal?'Costo total mensual':'Costo fijo mensual';
+  $('costTotalDesc').textContent=isTotal?'Sueldos + comisiones + IESS + beneficios':'Sueldos + IESS + beneficios (sin comisiones)';
+  $('costIessDesc').textContent=isTotal?'Aporte patronal sobre sueldos + comisiones':'Aporte patronal sobre sueldos';
+  $('costAssumptions').textContent=(isTotal?'Costo total: sueldos + comisiones + IESS patronal + décimo tercero + décimo cuarto + vacaciones + fondos de reserva.':'Costo fijo: sueldos + IESS patronal + décimo tercero + décimo cuarto + vacaciones + fondos de reserva. No incluye comisiones.')+' Los valores son una estimación gerencial y no reemplazan la liquidación oficial de nómina.';
+  $('costTrendCostOption').textContent=isTotal?'Costo total del mes (con comisiones)':'Costo fijo del mes';
+  const rows=consolidateMonthlyCosts(month).map(x=>costForView(x,sbu,iessRate,view)).filter(x=>(!department||x.department===department)&&(!employee||x.employee===employee)).sort((a,b)=>b.total-a.total);
+  const sum=field=>rows.reduce((total,row)=>total+Number(row[field]||0),0);
+  const total=sum('total'),remuneration=sum('remuneration'),iess=sum('iess'),benefits=sum('benefits');
+  const salaries=sum('salaries'),commissions=sum('commissions');
+  $('costTotal').textContent=money(total);
+  $('costEmployees').textContent=rows.length;
+  $('costAverage').textContent=money(rows.length?total/rows.length:0);
+  $('costRemuneration').textContent=money(salaries);
+  $('costCommissions').textContent=money(commissions);
+  $('costIess').textContent=money(iess);
+  $('costBenefits').textContent=money(benefits);
+  const splitCosto=sum('costo'),splitGasto=sum('gasto'),splitSin=sum('sinClasificar');
+  const pctOf=v=>total?(v/total*100).toFixed(1).replace('.',',')+'% del total':'0% del total';
+  $('costSplitCosto').textContent=money(splitCosto);
+  $('costSplitGasto').textContent=money(splitGasto);
+  $('costSplitSin').textContent=money(splitSin);
+  $('costSplitCostoDesc').textContent=pctOf(splitCosto)+' · '+rows.filter(x=>x.costo>0).length+' colaboradores';
+  $('costSplitGastoDesc').textContent=pctOf(splitGasto)+' · '+rows.filter(x=>x.gasto>0).length+' colaboradores';
+  $('costSplitSinDesc').textContent=pctOf(splitSin)+' · '+rows.filter(x=>x.sinClasificar>0).length+' colaboradores sin asiento 501/502';
+  const hasSin=splitSin>0.005;
+  $('costSplitSinCard').classList.toggle('hidden',!hasSin);
+  $('costSplitKpis').style.gridTemplateColumns=`repeat(${hasSin?3:2},minmax(0,1fr))`;
+  const w=v=>total?(v/total*100).toFixed(2):0;
+  $('costSplitBar').innerHTML=`<span style="width:${w(splitCosto)}%;background:#12325b"></span><span style="width:${w(splitGasto)}%;background:#7db900"></span><span style="width:${w(splitSin)}%;background:#d69e2e"></span>`;
+  const diff=Math.abs(splitCosto+splitGasto+splitSin-total);
+  $('costSplitCheck').innerHTML=`Costo ${money(splitCosto)} + Gasto ${money(splitGasto)}${hasSin?' + Sin clasificar '+money(splitSin):''} = <b>${money(splitCosto+splitGasto+splitSin)}</b> ${diff<0.01?'✓ cuadra con el total':'⚠ no cuadra con el total'}`;
+
+  const departments=new Map();
+  rows.forEach(row=>{
+    const item=departments.get(row.department)||{name:row.department,employees:0,salaries:0,commissions:0,iess:0,benefits:0,total:0,costo:0,gasto:0};
+    item.employees++;item.salaries+=row.salaries;item.commissions+=row.commissions;item.iess+=row.iess;item.benefits+=row.benefits;item.total+=row.total;item.costo+=row.costo;item.gasto+=row.gasto;
+    departments.set(row.department,item);
+  });
+  const departmentRows=[...departments.values()].sort((a,b)=>b.total-a.total);
+  const maxDepartment=Math.max(...departmentRows.map(x=>x.total),1);
+  $('costDepartmentBars').innerHTML=departmentRows.length?departmentRows.map(x=>`<div class="cost-bar-row"><div class="cost-bar-name">${esc(x.name)} · ${x.employees}</div><div class="cost-bar-track"><div class="cost-bar-fill" style="width:${Math.max(2,x.total/maxDepartment*100).toFixed(2)}%"></div></div><div class="cost-bar-value">${money(x.total)}</div></div>`).join(''):'<div class="empty">No hay datos para los filtros seleccionados.</div>';
+  if(costSelectedDept && !departmentRows.some(x=>x.name===costSelectedDept))costSelectedDept='';
+  $('costDepartmentBody').innerHTML=departmentRows.map(x=>`<tr data-dept="${esc(x.name)}" class="${x.name===costSelectedDept?'dept-selected':''}"><td><b>${esc(x.name)}</b></td><td class="center">${x.employees}</td><td class="right">${money(x.salaries)}</td><td class="right col-com">${money(x.commissions)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.benefits)}</td><td class="right"><b>${money(x.total)}</b></td><td class="right">${money(x.costo)}</td><td class="right">${money(x.gasto)}</td></tr>`).join('');
+  $('costDepartmentBody').querySelectorAll('tr').forEach(tr=>tr.addEventListener('click',()=>selectCostDept(tr.dataset.dept)));
+  const detailRows=costSelectedDept?rows.filter(x=>x.department===costSelectedDept):rows;
+  $('costDetailFilter').innerHTML=costSelectedDept?`<span class="cost-dept-chip">Mostrando: ${esc(costSelectedDept)} · ${detailRows.length} colaboradores <button type="button" id="costClearDept">Ver todos</button></span>`:'';
+  if(costSelectedDept)$('costClearDept').addEventListener('click',()=>selectCostDept(costSelectedDept));
+  $('costEmployeeBody').innerHTML=detailRows.map(x=>`<tr><td><b>${esc(x.employee)}</b></td><td>${esc(x.department)}</td><td class="right">${money(x.salaries)}</td><td class="right col-com">${money(x.commissions)}</td><td class="right">${money(x.iess)}</td><td class="right">${money(x.thirteenth)}</td><td class="right">${money(x.fourteenth)}</td><td class="right">${money(x.vacations)}</td><td class="right">${money(x.reserve)}</td><td class="right"><b>${money(x.total)}</b></td><td class="center">${accountTag(x)}</td></tr>`).join('');
+  renderCostTrend();
+  $('costContent').classList.remove('hidden');
+}
 
 function exportCSV(){
   const cols = [
@@ -1510,7 +3023,7 @@ function exportCSV(){
 
 document.addEventListener("DOMContentLoaded", async ()=>{
   const ready = initSupabase();
-  const publicToken = new URLSearchParams(location.search).get("evaluacion");
+  const publicToken = new URLSearchParams(location.search).get("evaluacion") || new URLSearchParams(location.search).get("id");
   if(ready && publicToken){ await loadPublicEvaluation(publicToken); return; }
 
   $("loginBtn").addEventListener("click",login);
@@ -1530,20 +3043,69 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   $("evalModalSave").addEventListener("click",saveEvalManager);
   $("evalModalUpload").addEventListener("click",()=>$("evalFileInput").click());
   $("commRefreshBtn").addEventListener("click",()=>{commissionsLoaded=false;loadCommissionData()});
+  $("commNewBtn").addEventListener("click",newCommissionCalc);
   $("commProject").addEventListener("change",renderCommissionProject);
   $("commBaseType").addEventListener("change",renderCommissionProject);
   $("commPct").addEventListener("input",()=>{document.querySelectorAll(".part-pct").forEach(x=>{if(!x.dataset.touched)x.value=$("commPct").value});recalcCommission()});
   $("commAddParticipant").addEventListener("click",addParticipant);
   $("commSaveBtn").addEventListener("click",saveCommission);
   $("commExcelBtn").addEventListener("click",exportCommissionExcel);
-  $("commPrintBtn").addEventListener("click",()=>window.print());
+  $("commPrintBtn").addEventListener("click",printCommission);
+
+  $("certEmployee").addEventListener("change",fillCertEmployee);
+  $("certPreviewBtn").addEventListener("click",previewCertificate);
+  $("certWordBtn").addEventListener("click",downloadCertificate);
+
+  $("rolesRefreshBtn").addEventListener("click",()=>{rolesLoaded=false;costsLoaded=false;loadRoles()});
+  $("rolEmployeeFilter").addEventListener("change",renderRoles);
+  $("rolMonthFilter").addEventListener("change",renderRoles);
+  $("costMonthFilter").addEventListener("change",()=>{buildCostFilters();renderCosts()});
+  $("costDepartmentFilter").addEventListener("change",()=>{buildCostEmployeeFilter();renderCosts()});
+  $("costEmployeeFilter").addEventListener("change",renderCosts);
+  $("costSbu").addEventListener("input",renderCosts);
+  $("costView").addEventListener("change",renderCosts);
+  $("costIessRate").addEventListener("input",renderCosts);
+  $("costTrendMetric").addEventListener("change",renderCostTrend);
 
   document.querySelectorAll(".nav-btn").forEach(btn=>{
     btn.addEventListener("click",()=>navigateModule(btn.dataset.module));
   });
 
+  // Empleados inactivos
+  $("inacSearch").addEventListener("input",renderInactivos);
+  $("inacYear").addEventListener("change",renderInactivos);
+  $("inacType").addEventListener("change",renderInactivos);
+  $("inacExportBtn").addEventListener("click",exportInactivos);
+  document.querySelectorAll(".inac-table th[data-isort]").forEach(th=>{
+    th.addEventListener("click",()=>{
+      const f = th.dataset.isort;
+      if(inacSortField===f) inacSortDir *= -1;
+      else { inacSortField=f; inacSortDir = (f==="fecha_salida"||f==="ultimo_sueldo"||f==="dias_trabajados") ? -1 : 1; }
+      renderInactivos();
+    });
+  });
+
+  // Personal por facturación
+  $("extGroupFilter").addEventListener("change",renderExterno);
+  $("extRefreshBtn").addEventListener("click",()=>{externoLoaded=false;extOpen.clear();loadExterno();});
+
+  // Tarjeta de inactivos: abre/cierra el detalle desplegable
+  const toggleInactivos = (show)=>{
+    const card = $("inactivosCard");
+    const abrir = show ?? card.classList.contains("hidden");
+    card.classList.toggle("hidden", !abrir);
+    $("kpiInactivos").classList.toggle("active", abrir);
+    $("sumInactivosSub").textContent = abrir ? "Clic para ocultar ▴" : "Clic para ver detalle ▾";
+  };
+  $("kpiInactivos").addEventListener("click",()=>toggleInactivos());
+  $("inacCloseBtn").addEventListener("click",()=>toggleInactivos(false));
+
   document.querySelectorAll(".kpi.clickable[data-drill]").forEach(card=>{
     card.addEventListener("click",()=>drillTo(card.dataset.drill));
+  });
+
+  document.querySelectorAll("#module-evaluaciones .kpi.clickable[data-kpi]").forEach(card=>{
+    card.addEventListener("click",()=>setEvalKpiFilter(card.dataset.kpi));
   });
 
   $("vacRefreshBtn").addEventListener("click",()=>{
@@ -1552,12 +3114,16 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   });
 
   $("genEmployee").addEventListener("change",fillGenerationEmployee);
+  $("genTemplate").addEventListener("change",()=>{
+    $("projectFields").style.display = ($("genTemplate").value === "obra") ? "" : "none";
+  });
+  $("projectFields").style.display = "none";
   $("genPreviewBtn").addEventListener("click",previewGeneration);
   $("genClearBtn").addEventListener("click",clearGeneration);
-  $("genWordBtn").addEventListener("click",prepareContract);
+  $("genWordBtn").addEventListener("click",generateContractWord);
   $("vacSearch").addEventListener("input",renderVacations);
 
-  ["searchInput","typeFilter","bossFilter","statusFilter"].forEach(id=>{
+  ["searchInput","departmentFilter","typeFilter","bossFilter","statusFilter"].forEach(id=>{
     const el = $(id);
     const eventName = id==="searchInput" ? "input" : "change";
     el.addEventListener(eventName,()=>{
