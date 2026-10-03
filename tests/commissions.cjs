@@ -24,6 +24,12 @@ vm.runInContext(extract('async function saveCommission(){','async function loadS
  context.anticiposComisiones={uno:100};let input={value:99};context.money=v=>'$'+v;
  context.autofillAnticipo({selectedOptions:[{textContent:'Uno'}],closest:()=>({querySelector:()=>input})});
  assert.equal(input.value,0);assert.match(input.title,/100/);
+ vm.runInContext(extract('function commissionOdooStatus(nombre){','function autofillAnticipo(select){'),context);
+ assert.match(context.commissionOdooStatus('Uno'),/Por cruzar en Odoo: \$100/);
+ assert.equal(context.anticiposComisiones.uno,100);
+ assert.match(context.commissionOdooStatus('Desconocido'),/no disponible/);
+ context.anticiposComisiones.uno=0;
+ assert.match(context.commissionOdooStatus('Uno'),/Saldo de anticipo en Odoo: \$0/);
  const old={id:'old',proyecto:'102',comisiones_participantes:[{empleado_id:1,empleado_nombre:'Uno',pct_participacion:0}]};
  context.savedCommissions=[old];context.editSavedCommission('old');assert.equal(restored.at(-1).anticipo,undefined);assert.match(alerts.at(-1),/no conserva/);
  assert.equal(fs.readFileSync(require('path').join(__dirname,'../dashboard_rrhh_energycontrol_logo.html'),'utf8'),html);
