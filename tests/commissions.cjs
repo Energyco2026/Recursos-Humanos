@@ -1,0 +1,37 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+const html=fs.readFileSync(require('path').join(__dirname,'../index.html'),'utf8');
+for(const script of html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g))new vm.Script(script[1]);
+function extract(start,end){return html.slice(html.indexOf(start),html.indexOf(end,html.indexOf(start)));}
+const values={commProject:{value:''},commPeriod:{value:'2026-10'},commBaseType:{value:'cobrado'},commInclude:{value:'0'},commClient:{value:'Cliente'},commAnalytic:{value:'PO'},commPct:{value:'5'},commSaveBtn:{},commParticipants:{innerHTML:''}};
+const row=(id,advance)=>({dataset:{invoice:'1'},querySelector:s=>s==='.part-emp'?{value:String(id),selectedOptions:[{textContent:'Empleado '+id}]}:{value:({'.part-pct':'5','.part-gross':'100,00','.part-iess':'9,45','.part-net':'90,55','.part-anticipo-input':String(advance)})[s]}});
+let rows=[row(1,10),row(2,25)],savedParts=[],alerts=[],restored=[];
+const context={$:id=>values[id],document:{querySelectorAll:()=>rows,getElementById:()=>({scrollIntoView(){}})},currentCommissionProject:()=>({proyecto:'101',monto_contrato:2000}),allContracts:[{empleado_id:1,empleado_nombre:'Uno'},{empleado_id:2,empleado_nombre:'Dos'}],savedCommissions:[],editingCalcId:null,commissionsLoaded:true,num:v=>Number(v||0),selectedInvoices:()=>[],parseMoney:v=>Number(v.replace(',','.')),alert:v=>alerts.push(v),confirm:()=>true,loadSavedCommissions:async()=>{},checkExistingCommissionForPO:()=>{},renderCommissionProject:()=>{},recalcCommission:()=>{},addParticipant:p=>restored.push(p),sb:{from:table=>({select:()=>({limit:async()=>({error:null})}),insert:data=>{if(table==='comisiones_participantes'){savedParts=JSON.parse(JSON.stringify(data));return Promise.resolve({error:null});}return {select:()=>({single:async()=>({data:{id:'calc-a'}})})};},update:()=>({eq:async()=>({error:null})}),delete:()=>({eq:async()=>({error:null})})})}};
+vm.createContext(context);
+vm.runInContext(extract('async function saveCommission(){','async function loadSavedCommissions(){'),context);
+(async()=>{
+ await context.saveCommission();
+ assert.deepEqual(savedParts.map(x=>[x.calculo_id,x.empleado_id,x.anticipo_descontado,x.neto_pagar]),[['calc-a',1,10,80.55],['calc-a',2,25,65.55]]);
+ context.savedCommissions=[{id:'calc-a',proyecto:'101',comisiones_participantes:savedParts}];
+ context.editSavedCommission('calc-a');
+ assert.deepEqual(restored.map(x=>[x.empleado_id,x.anticipo]),[[1,10],[2,25]]);
+ context.editingCalcId=null;rows=[row(1,0)];await context.saveCommission();
+ assert.equal(savedParts[0].anticipo_descontado,0);assert.equal(savedParts[0].neto_pagar,90.55);
+ context.editingCalcId='calc-a';rows=[row(1,7)];await context.saveCommission();
+ assert.equal(savedParts[0].calculo_id,'calc-a');assert.equal(savedParts[0].anticipo_descontado,7);
+ rows=[row(1,-5)];const before=JSON.stringify(savedParts);await context.saveCommission();assert.equal(JSON.stringify(savedParts),before);
+ rows=[row(1,5),row(1,5)];await context.saveCommission();assert.equal(JSON.stringify(savedParts),before);
+ vm.runInContext(extract('function autofillAnticipo(select){','async function saveCommission(){'),context);
+ context.anticiposComisiones={uno:100};let input={value:99};context.money=v=>'$'+v;
+ context.autofillAnticipo({selectedOptions:[{textContent:'Uno'}],closest:()=>({querySelector:()=>input})});
+ assert.equal(input.value,0);assert.match(input.title,/100/);
+ vm.runInContext(extract('function commissionOdooStatus(nombre){','function autofillAnticipo(select){'),context);
+ assert.match(context.commissionOdooStatus('Uno'),/Por cruzar en Odoo: \$100/);
+ assert.equal(context.anticiposComisiones.uno,100);
+ assert.match(context.commissionOdooStatus('Desconocido'),/no disponible/);
+ context.anticiposComisiones.uno=0;
+ assert.match(context.commissionOdooStatus('Uno'),/Saldo de anticipo en Odoo: \$0/);
+ const old={id:'old',proyecto:'102',comisiones_participantes:[{empleado_id:1,empleado_nombre:'Uno',pct_participacion:0}]};
+ context.savedCommissions=[old];context.editSavedCommission('old');assert.equal(restored.at(-1).anticipo,undefined);assert.match(alerts.at(-1),/no conserva/);
+ assert.equal(fs.readFileSync(require('path').join(__dirname,'../dashboard_rrhh_energycontrol_logo.html'),'utf8'),html);
+ console.log('PASS: syntax; distinct employee deductions; restore; zero; update; invalid/duplicate rejection; no balance reuse; historical warning; identical entry points.');
+})().catch(e=>{console.error(e);process.exitCode=1});
