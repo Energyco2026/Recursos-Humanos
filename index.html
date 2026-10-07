@@ -2698,10 +2698,31 @@ function longDate(iso){
   const d=new Date(iso+"T12:00:00");
   return `${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
 }
-function fillCertEmployee(){
+let certIdMap=null;
+async function certCedula(empId){
+  if(!certIdMap){
+    certIdMap=new Map();
+    (allRoles||[]).forEach(r=>{if(r.odoo_employee_id&&r.identificacion)certIdMap.set(String(r.odoo_employee_id),String(r.identificacion));});
+    if(!certIdMap.size){
+      const {data,error}=await sb.from("roles_pago").select("odoo_employee_id,identificacion").not("identificacion","is",null).limit(5000);
+      if(!error)(data||[]).forEach(r=>{if(r.odoo_employee_id)certIdMap.set(String(r.odoo_employee_id),String(r.identificacion));});
+      else certIdMap=null;
+    }
+  }
+  return certIdMap?certIdMap.get(String(empId))||"":"";
+}
+async function fillCertEmployee(){
   const s = certSelected();
   $("certEnd").value = "";
+  $("certId").value = "";
+  $("certId").placeholder = "";
   if(!s) return;
+  const empId=String($("certEmployee").value||"").split(":")[1];
+  const ced=await certCedula(empId);
+  if(String($("certEmployee").value||"").split(":")[1]===empId){
+    $("certId").value=ced;
+    if(!ced)$("certId").placeholder="Sin cédula en roles: escríbela";
+  }
   $("certJob").value = s.cargo || "";
   $("certSalary").value = s.salario || "";
   $("certStart").value = s.inicio || "";
