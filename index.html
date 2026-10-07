@@ -1054,12 +1054,14 @@
             <div class="filters">
               <select id="rolEmployeeFilter"><option value="">Todos los colaboradores</option></select>
               <input id="rolMonthFilter" type="month">
+              <input id="rolSearch" type="search" placeholder="Buscar por nombre o cédula">
+              <button class="btn-secondary" id="rolExcelBtn">Exportar Excel</button>
             </div>
             <div class="table-meta"><span id="rolCount">0 registros</span></div>
             <div class="table-wrap">
               <div id="rolLoading" class="loading hidden">Cargando roles de pago...</div>
               <table id="rolTable" class="hidden">
-                <thead><tr><th>Periodo</th><th>Colaborador</th><th>Área</th><th>Cargo</th><th>Ingresos</th><th>Egresos</th><th>Neto</th></tr></thead>
+                <thead><tr><th>Periodo</th><th>Cédula</th><th>Colaborador</th><th>Área</th><th>Cargo</th><th>Ingresos</th><th>Egresos</th><th>Neto</th></tr></thead>
                 <tbody id="rolBody"></tbody>
               </table>
               <div id="rolEmpty" class="empty hidden">No hay roles de pago que coincidan con los filtros.</div>
@@ -2762,17 +2764,42 @@ async function loadRoles(){
   $("rolLatest").textContent=periods.length?dateEC(periods[periods.length-1]):"—";
   renderRoles();
 }
-function renderRoles(){
+function filteredRoles(){
   const emp=$("rolEmployeeFilter").value, mes=$("rolMonthFilter").value;
-  const rows=allRoles.filter(x=>{
+  const q=String($("rolSearch").value||"").trim().toLowerCase();
+  return allRoles.filter(x=>{
     if(emp && x.empleado_nombre!==emp) return false;
     if(mes && String(x.periodo_desde||"").slice(0,7)!==mes) return false;
+    if(q && !String(x.empleado_nombre||"").toLowerCase().includes(q) && !String(x.identificacion||"").includes(q)) return false;
     return true;
   });
+}
+function exportRolesExcel(){
+  const rows=filteredRoles();
+  if(!rows.length)return alert("No hay roles que exportar con los filtros actuales.");
+  const n=v=>Number(v||0);
+  const data=rows.map(r=>({
+    "Cédula":String(r.identificacion||""),"Colaborador":r.empleado_nombre||"","Área":r.area||"","Cargo":r.cargo||"",
+    "Periodo desde":r.periodo_desde||"","Periodo hasta":r.periodo_hasta||"","Referencia":r.referencia||"","Estado":r.estado||"",
+    "Sueldo básico":n(r.sueldo_basico),"Sueldo ganado":n(r.sueldo_ganado),"Comisiones":n(r.comisiones),"Horas extras":n(r.horas_extras),
+    "Fondos de reserva":n(r.fondos_reserva),"Total ingresos":n(r.total_ingresos),"Anticipo quincenal":n(r.anticipo_quincenal),
+    "Aporte IESS":n(r.aporte_iess),"Impuesto a la renta":n(r.impuesto_renta),"Préstamos":n(r.prestamos),"Multas":n(r.multas),
+    "Total egresos":n(r.total_egresos),"Neto a recibir":n(r.neto_recibir)
+  }));
+  const ws=XLSX.utils.json_to_sheet(data);
+  // Cédula como texto para no perder el cero inicial
+  for(let i=0;i<data.length;i++){const c=ws[XLSX.utils.encode_cell({r:i+1,c:0})];if(c){c.t="s";c.z="@";}}
+  ws["!cols"]=[{wch:13},{wch:34},{wch:22},{wch:26},{wch:12},{wch:12},{wch:16},{wch:10}].concat(Array(13).fill({wch:13}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Roles");
+  const mes=$("rolMonthFilter").value;
+  XLSX.writeFile(wb,`Roles_de_pago${mes?"_"+mes:""}.xlsx`);
+}
+function renderRoles(){
+  const rows=filteredRoles();
   $("rolCount").textContent=`${rows.length} registros`;
   if(!rows.length){$("rolTable").classList.add("hidden");$("rolEmpty").classList.remove("hidden");return;}
   $("rolEmpty").classList.add("hidden");$("rolTable").classList.remove("hidden");
-  $("rolBody").innerHTML=rows.map(r=>`<tr><td>${dateEC(r.periodo_desde)} — ${dateEC(r.periodo_hasta)}</td><td>${esc(r.empleado_nombre||"—")}</td><td>${esc(r.area||"—")}</td><td>${esc(r.cargo||"—")}</td><td>${money(r.total_ingresos)}</td><td>${money(r.total_egresos)}</td><td>${money(r.neto_recibir)}</td></tr>`).join("");
+  $("rolBody").innerHTML=rows.map(r=>`<tr><td>${dateEC(r.periodo_desde)} — ${dateEC(r.periodo_hasta)}</td><td>${esc(r.identificacion||"—")}</td><td>${esc(r.empleado_nombre||"—")}</td><td>${esc(r.area||"—")}</td><td>${esc(r.cargo||"—")}</td><td>${money(r.total_ingresos)}</td><td>${money(r.total_egresos)}</td><td>${money(r.neto_recibir)}</td></tr>`).join("");
 }
 
 /* ============================================================
@@ -3079,6 +3106,8 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   $("rolesRefreshBtn").addEventListener("click",()=>{rolesLoaded=false;costsLoaded=false;loadRoles()});
   $("rolEmployeeFilter").addEventListener("change",renderRoles);
   $("rolMonthFilter").addEventListener("change",renderRoles);
+  $("rolSearch").addEventListener("input",renderRoles);
+  $("rolExcelBtn").addEventListener("click",exportRolesExcel);
   $("costMonthFilter").addEventListener("change",()=>{buildCostFilters();renderCosts()});
   $("costDepartmentFilter").addEventListener("change",()=>{buildCostEmployeeFilter();renderCosts()});
   $("costEmployeeFilter").addEventListener("change",renderCosts);
