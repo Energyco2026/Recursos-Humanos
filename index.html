@@ -1046,7 +1046,7 @@
             <div><button class="small-btn" id="rolesRefreshBtn">↻ Actualizar</button></div>
           </div>
           <section class="kpis" style="margin-bottom:16px">
-            <article class="kpi blue"><div class="label">Roles cargados</div><div class="value" id="rolTotal">0</div><div class="sub">Registros totales</div></article>
+            <article class="kpi blue"><div class="label">Roles cargados</div><div class="value" id="rolTotal">0</div><div class="sub">Roles de fin de mes (sin quincenas)</div></article>
             <article class="kpi"><div class="label">Colaboradores</div><div class="value" id="rolEmployees">0</div><div class="sub">Con al menos un rol</div></article>
             <article class="kpi green"><div class="label">Último periodo</div><div class="value" id="rolLatest" style="font-size:18px">—</div><div class="sub">Periodo más reciente cargado</div></article>
           </section>
@@ -2780,9 +2780,10 @@ async function loadRoles(){
   $("rolLoading").classList.add("hidden");
   if(error){$("rolEmpty").textContent="No se pudieron cargar los roles de pago: "+error.message;$("rolEmpty").classList.remove("hidden");return;}
   allRoles=data||[];rolesLoaded=true;
-  $("rolTotal").textContent=allRoles.length;
-  $("rolEmployees").textContent=new Set(allRoles.map(x=>x.empleado_nombre).filter(Boolean)).size;
-  const periods=allRoles.map(x=>x.periodo_desde).filter(Boolean).sort();
+  const finMes=rolesFinDeMes();
+  $("rolTotal").textContent=finMes.length;
+  $("rolEmployees").textContent=new Set(finMes.map(x=>x.empleado_nombre).filter(Boolean)).size;
+  const periods=finMes.map(x=>x.periodo_desde).filter(Boolean).sort();
   $("rolLatest").textContent=periods.length?dateEC(periods[periods.length-1]):"—";
   renderRoles();
 }
@@ -2877,10 +2878,13 @@ function printRoles(rows){
   w.onload=()=>setTimeout(imprimir,300);
   setTimeout(imprimir,1500);
 }
+// La quincena es un anticipo: el rol de fin de mes ya la descuenta. Solo se muestra el rol de fin de mes.
+function esQuincena(r){return Array.isArray(r.lineas)&&r.lineas.some(l=>l.categoria==='Quincena');}
+function rolesFinDeMes(){return (allRoles||[]).filter(r=>!esQuincena(r));}
 function filteredRoles(){
   const emp=$("rolEmployeeFilter").value, mes=$("rolMonthFilter").value;
   const q=String($("rolSearch").value||"").trim().toLowerCase();
-  return allRoles.filter(x=>{
+  return rolesFinDeMes().filter(x=>{
     if(emp && x.empleado_nombre!==emp) return false;
     if(mes && String(x.periodo_desde||"").slice(0,7)!==mes) return false;
     if(q && !String(x.empleado_nombre||"").toLowerCase().includes(q) && !String(x.identificacion||"").includes(q)) return false;
