@@ -413,6 +413,14 @@
     .pres-sched th{font-size:11px;text-transform:uppercase;color:var(--muted)}
     .pres-sched .r{text-align:right}
     @media(max-width:800px){.pres-summary{grid-template-columns:1fr 1fr}}
+    .pres-abonos{margin-top:14px;border:1px dashed #cfd8e3;border-radius:12px;padding:12px 14px;background:#fcfdfb}
+    .pres-abonos-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    .pres-abonos-head b{color:var(--navy);font-size:13px}.pres-abonos-head span{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+    .pres-abono-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 1.4fr auto;gap:8px;margin-top:10px;align-items:center}
+    .pres-abono-row input,.pres-abono-row select{width:100%;padding:9px;border:1px solid #d7dee9;border-radius:9px;background:#fff}
+    .pres-abono-row button{border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:9px;padding:8px 11px;cursor:pointer}
+    .pres-sched tr.abono td{background:#f3f8e6;font-weight:700}
+    @media(max-width:800px){.pres-abono-row{grid-template-columns:1fr 1fr}}
     .pres-hist-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
     .pres-hist-filters{display:flex;gap:8px;flex-wrap:wrap}
     .pres-hist-filters input,.pres-hist-filters select{padding:9px 11px;border:1px solid #d7dee9;border-radius:10px;background:#fff}
@@ -1106,9 +1114,16 @@
               <div class="form-group"><label>Número de cuotas</label><input id="presCuotas" type="number" min="1" step="1" value="1"></div>
               <div class="form-group"><label>Fecha del primer descuento</label><input id="presFirst" type="date"></div>
             </div>
+            <div class="pres-abonos">
+              <div class="pres-abonos-head">
+                <div><b>Abonos extraordinarios</b><span>Décimos, utilidades u otros pagos que se descuentan completos. Se restan del préstamo y el resto se reparte en las cuotas.</span></div>
+                <button class="btn-secondary" id="presAddAbono" type="button">+ Agregar abono</button>
+              </div>
+              <div id="presAbonos"></div>
+            </div>
             <div class="pres-summary">
-              <div><span>Cuota</span><b id="presCuotaOut">—</b></div>
-              <div><span>Saldo total a recuperar</span><b id="presTotalOut">—</b></div>
+              <div><span>Cuota regular</span><b id="presCuotaOut">—</b></div>
+              <div><span>Total a recuperar</span><b id="presTotalOut">—</b></div>
               <div><span>Último descuento</span><b id="presLastOut">—</b></div>
               <div id="presPctBox"><span>Cuota vs. sueldo mensual</span><b id="presPctOut">—</b></div>
             </div>
@@ -2796,22 +2811,58 @@ function presDates(firstIso,n,freq){
   }
   return out;
 }
+const PRES_CONCEPTOS=["Décimo tercero","Décimo cuarto","Utilidades","Liquidación","Otro"];
+function addPresAbono(a={}){
+  const div=document.createElement("div");div.className="pres-abono-row";
+  div.innerHTML=`<select class="ab-concepto">${PRES_CONCEPTOS.map(c=>`<option${c===(a.concepto||"Décimo tercero")?" selected":""}>${c}</option>`).join("")}</select>
+    <input class="ab-fecha" type="date" value="${esc(a.fecha||"")}">
+    <input class="ab-valor" type="number" step="0.01" min="0" placeholder="Valor USD" value="${a.valor??""}">
+    <input class="ab-nota" placeholder="Detalle (opcional)" value="${esc(a.nota||"")}">
+    <button type="button" title="Quitar">✕</button>`;
+  div.querySelector("button").addEventListener("click",()=>{div.remove();calcPrestamo();});
+  div.querySelectorAll("input,select").forEach(el=>{el.addEventListener("input",calcPrestamo);el.addEventListener("change",calcPrestamo)});
+  $("presAbonos").appendChild(div);
+  if(!a.fecha&&a.concepto===undefined){ // sugerir 20 de diciembre para décimo tercero
+    const t=new Date();div.querySelector(".ab-fecha").value=`${t.getFullYear()}-12-20`;
+  }
+  calcPrestamo();
+}
+function presAbonos(){
+  return [...document.querySelectorAll("#presAbonos .pres-abono-row")].map(r=>({
+    concepto:r.querySelector(".ab-concepto").value,
+    fecha:r.querySelector(".ab-fecha").value,
+    valor:Number(r.querySelector(".ab-valor").value||0),
+    nota:r.querySelector(".ab-nota").value.trim()
+  })).filter(a=>a.valor>0);
+}
+// Cronograma: abonos extraordinarios (valor completo) + cuotas regulares sobre el saldo restante.
 function presSchedule(){
   const amount=Math.round(Number($("presAmount").value||0)*100);
   const n=Math.max(0,parseInt($("presCuotas").value||0,10));
-  if(!amount||!n)return [];
-  const base=Math.floor(amount/n),resto=amount-base*n;
-  const dates=presDates($("presFirst").value,n,$("presFreq").value);
-  let saldo=amount;const rows=[];
-  for(let i=0;i<n;i++){const c=base+(i===n-1?resto:0);saldo-=c;rows.push({n:i+1,fecha:dates[i]||"",cuota:c/100,saldo:saldo/100});}
-  return rows;
+  const abonos=presAbonos();
+  const abCents=abonos.reduce((t,a)=>t+Math.round(a.valor*100),0);
+  const restante=amount-abCents;
+  if(!amount||restante<0||(restante>0&&!n))return [];
+  const items=abonos.map(a=>({tipo:"abono",concepto:a.concepto+(a.nota?` (${a.nota})`:""),fecha:a.fecha||"",c:Math.round(a.valor*100)}));
+  if(restante>0){
+    const base=Math.floor(restante/n),resto=restante-base*n;
+    const dates=presDates($("presFirst").value,n,$("presFreq").value);
+    for(let i=0;i<n;i++)items.push({tipo:"cuota",concepto:`Cuota ${i+1} de ${n}`,fecha:dates[i]||"",c:base+(i===n-1?resto:0),_i:i});
+  }
+  items.sort((a,b)=>(a.fecha||"9999").localeCompare(b.fecha||"9999")||(a.tipo==="abono"?-1:1));
+  let saldo=amount;
+  return items.map((it,k)=>{saldo-=it.c;return {n:k+1,tipo:it.tipo,concepto:it.concepto,fecha:it.fecha,cuota:it.c/100,saldo:saldo/100};});
 }
+function presRegular(rows){return rows.filter(r=>r.tipo!=="abono")}
 function calcPrestamo(){
   const rows=presSchedule();
   const amount=Number($("presAmount").value||0);
-  const cuota=rows.length?rows[0].cuota:0;
-  const ultima=rows.length?rows[rows.length-1]:null;
-  $("presCuotaOut").textContent=rows.length?money(cuota):"—";
+  const reg=presRegular(rows), abonos=presAbonos();
+  const abTotal=abonos.reduce((t,a)=>t+a.valor,0);
+  const cuota=reg.length?reg[0].cuota:0;
+  const ultimaReg=reg.length?reg[reg.length-1]:null;
+  const ultima=rows.length?rows.reduce((m,r)=>(r.fecha||"")>(m.fecha||"")?r:m,rows[0]):null;
+  $("presCuotaOut").textContent=reg.length?money(cuota):"—";
   $("presTotalOut").textContent=amount?money(amount):"—";
   $("presLastOut").textContent=ultima&&ultima.fecha?dateEC(ultima.fecha):"—";
   const sal=Number($("presSalary").value||0);
@@ -2820,31 +2871,42 @@ function calcPrestamo(){
   $("presPctOut").textContent=pct?pct.toFixed(1)+"%":"—";
   $("presPctBox").classList.toggle("warn",pct>30);
   const notes=[];
-  if(rows.length&&ultima.cuota!==cuota)notes.push(`La última cuota se ajusta a ${money(ultima.cuota)} por redondeo.`);
+  if(abTotal>amount&&amount)notes.push(`⚠ Los abonos (${money(abTotal)}) superan el valor del préstamo.`);
+  else if(abTotal&&amount)notes.push(`Abonos extraordinarios: ${money(abTotal)} · Saldo a repartir en cuotas: ${money(amount-abTotal)}.`);
+  if(abonos.some(a=>!a.fecha))notes.push("⚠ Falta la fecha de un abono.");
+  if(ultimaReg&&ultimaReg.cuota!==cuota)notes.push(`La última cuota se ajusta a ${money(ultimaReg.cuota)} por redondeo.`);
   if($("presFreq").value==="quincenal"&&cuota)notes.push(`Descuento mensual equivalente: ${money(mensual)}.`);
   $("presNote").textContent=notes.join(" ");
 }
 function previewPrestamo(){
   const rows=presSchedule();
-  if(!rows.length){alert("Ingresa el valor y el número de cuotas.");return;}
-  $("presPreview").innerHTML=`<b>Cronograma de descuentos</b><table class="pres-sched"><thead><tr><th>#</th><th>Fecha</th><th class="r">Cuota</th><th class="r">Saldo</th></tr></thead><tbody>${
-    rows.map(r=>`<tr><td>${r.n}</td><td>${r.fecha?dateEC(r.fecha):"—"}</td><td class="r">${money(r.cuota)}</td><td class="r">${money(r.saldo)}</td></tr>`).join("")}</tbody></table>`;
+  if(!rows.length){alert("Ingresa el valor y el número de cuotas (y revisa que los abonos no superen el préstamo).");return;}
+  $("presPreview").innerHTML=`<b>Cronograma de descuentos</b><table class="pres-sched"><thead><tr><th>#</th><th>Fecha</th><th>Concepto</th><th class="r">Valor</th><th class="r">Saldo</th></tr></thead><tbody>${
+    rows.map(r=>`<tr class="${r.tipo==="abono"?"abono":""}"><td>${r.n}</td><td>${r.fecha?dateEC(r.fecha):"—"}</td><td>${esc(r.concepto||"Cuota")}</td><td class="r">${money(r.cuota)}</td><td class="r">${money(r.saldo)}</td></tr>`).join("")}</tbody></table>`;
   $("presPreview").classList.add("show");
 }
 function validPrestamo(){
   if(!$("presEmployee").value){alert("Selecciona un colaborador.");return false;}
-  if(!(Number($("presAmount").value)>0)){alert("Ingresa el valor solicitado.");$("presAmount").focus();return false;}
-  if(!(parseInt($("presCuotas").value,10)>=1)){alert("Ingresa el número de cuotas.");$("presCuotas").focus();return false;}
-  if(!$("presFirst").value){alert("Ingresa la fecha del primer descuento.");$("presFirst").focus();return false;}
+  const amount=Number($("presAmount").value);
+  if(!(amount>0)){alert("Ingresa el valor solicitado.");$("presAmount").focus();return false;}
+  const abonos=presAbonos(), abTotal=abonos.reduce((t,a)=>t+a.valor,0);
+  if(abTotal>amount+0.001){alert("Los abonos extraordinarios superan el valor del préstamo.");return false;}
+  if(abonos.some(a=>!a.fecha)){alert("Ingresa la fecha de cada abono extraordinario.");return false;}
+  const restante=Math.round((amount-abTotal)*100);
+  if(restante>0){
+    if(!(parseInt($("presCuotas").value,10)>=1)){alert("Ingresa el número de cuotas.");$("presCuotas").focus();return false;}
+    if(!$("presFirst").value){alert("Ingresa la fecha del primer descuento.");$("presFirst").focus();return false;}
+  }
   return true;
 }
 let presEditingId=null, presList=[], prestamosLoaded=false;
 function collectPrestamo(){
   const x=allContracts.find(c=>String(c.empleado_id)===String($("presEmployee").value))||{};
-  const rows=presSchedule();
+  const rows=presSchedule(), reg=presRegular(rows);
+  const fechas=rows.map(r=>r.fecha).filter(Boolean).sort();
   return {
     empleado_id:Number($("presEmployee").value),
-    empleado_nombre:x.empleado_nombre||"",
+    empleado_nombre:x.empleado_nombre||$("presEmployee").selectedOptions[0]?.text.replace(/ \(inactivo\)$/,"")||"",
     cedula:$("presId").value.trim()||null,
     cargo:$("presJob").value.trim()||null,
     fecha_ingreso:$("presStart").value||null,
@@ -2855,11 +2917,12 @@ function collectPrestamo(){
     fecha_solicitud:$("presDate").value||presIso(new Date()),
     fecha_desembolso:$("presDisb").value||null,
     frecuencia:$("presFreq").value,
-    num_cuotas:rows.length,
-    cuota:rows[0].cuota,
-    fecha_primer_descuento:$("presFirst").value,
-    fecha_ultimo_descuento:rows[rows.length-1].fecha||null,
+    num_cuotas:reg.length,
+    cuota:reg.length?reg[0].cuota:0,
+    fecha_primer_descuento:fechas[0]||$("presFirst").value,
+    fecha_ultimo_descuento:fechas[fechas.length-1]||null,
     cronograma:rows,
+    abonos:presAbonos(),
     revisado_por:$("presRev").value.trim()||null,
     aprobado_por:$("presApr").value.trim()||null
   };
@@ -2901,7 +2964,9 @@ function writePrestamoDoc(w,r){
   const val=t=>t?`<span class="fill">${t}</span>`:blank;
   const fd=iso=>iso?esc(dateEC(String(iso).slice(0,10))):"____ / ____ / ______";
   const chk=on=>on?"☒":"☐";
-  const first=rows[0]?.cuota||Number(r.cuota), last=rows[rows.length-1]?.cuota||first;
+  const reg=rows.filter(c=>c.tipo!=="abono"), abs=rows.filter(c=>c.tipo==="abono");
+  const first=reg[0]?.cuota??Number(r.cuota), last=reg[reg.length-1]?.cuota??first;
+  const abTotal=abs.reduce((t,c)=>t+c.cuota,0);
   const head=t=>`<div class="hd">${logo?`<img src="${logo}" alt="ENERGYCONTROL">`:'<b style="color:#24864B;font-size:15px">ENERGY CONTROL</b>'}<div class="t">${t}<br><span class="num">N.º ${e(r.numero)}</span></div></div>`;
   w.document.open();
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Préstamo ${e(r.numero)} - ${e(r.empleado_nombre)}</title><style>
@@ -2945,16 +3010,17 @@ function writePrestamoDoc(w,r){
     <tr><td class="l">Valor solicitado (USD):</td><td>${val("$ "+e(money(r.valor)))}</td></tr>
     <tr><td class="l">Motivo de la solicitud:</td><td>${r.motivo?`<span class="fill" style="min-width:100%">${e(r.motivo)}</span>`:blank+"<br>"+blank}</td></tr>
     <tr><td class="l">Fecha de desembolso solicitada:</td><td>${val(fd(r.fecha_desembolso))}</td></tr>
-    <tr><td class="l">Número de cuotas:</td><td>${val(e(r.num_cuotas))}</td></tr>
-    <tr><td class="l">Valor de cada cuota (USD):</td><td>${val("$ "+e(money(first))+(last!==first?` (última: ${e(money(last))})`:""))}</td></tr>
+    <tr><td class="l">Número de cuotas:</td><td>${val(e(r.num_cuotas)+(abs.length?` cuota(s) + ${abs.length} abono(s) extraordinario(s)`:""))}</td></tr>
+    <tr><td class="l">Valor de cada cuota (USD):</td><td>${reg.length?val("$ "+e(money(first))+(last!==first?` (última: ${e(money(last))})`:"")):val("— (cubierto con abonos)")}</td></tr>
   </table>
 
   <div class="sec">3. FORMA DE PAGO Y AUTORIZACIÓN DE DESCUENTO</div>
   <p>Solicito a ENERGY CONTROL la aprobación del préstamo descrito en este formulario. En caso de aprobación, acepto el cronograma de devolución acordado y autorizo expresamente los descuentos de nómina que correspondan, conforme a la normativa aplicable. Toda modificación del monto o calendario deberá documentarse y contar con la autorización correspondiente.</p>
   <table class="f">
     <tr><td class="l">Inicio de descuento:</td><td>${val(fd(r.fecha_primer_descuento))}</td></tr>
+    ${abs.map(c=>`<tr><td class="l">Abono extraordinario:</td><td>${val(e(c.concepto)+" · "+fd(c.fecha)+" · USD "+e(money(c.cuota)))}</td></tr>`).join("")}
     <tr><td class="l">Frecuencia:</td><td>${chk(r.frecuencia==="quincenal")} Quincenal &nbsp;&nbsp; ${chk(r.frecuencia==="mensual")} Mensual &nbsp;&nbsp; ☐ Otra: ________</td></tr>
-    <tr><td class="l">Cuota acordada:</td><td>${val("USD "+e(money(first)))}</td></tr>
+    <tr><td class="l">Cuota acordada:</td><td>${reg.length?val("USD "+e(money(first))+(abs.length?` × ${reg.length} cuota(s) sobre saldo de USD ${e(money(Number(r.valor)-abTotal))}`:"")):val("—")}</td></tr>
     <tr><td class="l">Saldo total a recuperar:</td><td>${val("USD "+e(money(r.valor)))}</td></tr>
   </table>
 
@@ -2979,9 +3045,9 @@ function writePrestamoDoc(w,r){
 
   <div class="pb"></div>
   ${head("ANEXO · CRONOGRAMA DE DESCUENTOS")}
-  <p><b>Trabajador:</b> ${e(r.empleado_nombre)} &nbsp; · &nbsp; <b>Cédula:</b> ${e(r.cedula)} &nbsp; · &nbsp; <b>Préstamo:</b> ${e(money(r.valor))} en ${e(r.num_cuotas)} cuota(s) ${r.frecuencia==="quincenal"?"quincenales":"mensuales"}</p>
-  <table class="sched"><thead><tr><th>#</th><th>Fecha de descuento</th><th class="r">Cuota</th><th class="r">Saldo pendiente</th></tr></thead><tbody>
-  ${rows.map(c=>`<tr><td>${c.n}</td><td>${c.fecha?fd(c.fecha):"—"}</td><td class="r">${e(money(c.cuota))}</td><td class="r">${e(money(c.saldo))}</td></tr>`).join("")}
+  <p><b>Trabajador:</b> ${e(r.empleado_nombre)} &nbsp; · &nbsp; <b>Cédula:</b> ${e(r.cedula)} &nbsp; · &nbsp; <b>Préstamo:</b> ${e(money(r.valor))}${abs.length?` · ${abs.length} abono(s) por ${e(money(abTotal))}`:""}${reg.length?` · ${reg.length} cuota(s) ${r.frecuencia==="quincenal"?"quincenales":"mensuales"}`:""}</p>
+  <table class="sched"><thead><tr><th>#</th><th>Fecha de descuento</th><th>Concepto</th><th class="r">Valor</th><th class="r">Saldo pendiente</th></tr></thead><tbody>
+  ${rows.map(c=>`<tr${c.tipo==="abono"?' style="background:#f3f8e6;font-weight:700"':""}><td>${c.n}</td><td>${c.fecha?fd(c.fecha):"—"}</td><td>${e(c.concepto||"Cuota")}</td><td class="r">${e(money(c.cuota))}</td><td class="r">${e(money(c.saldo))}</td></tr>`).join("")}
   </tbody></table>
   <table class="firmas" style="margin-top:40px;width:66%"><tr><td style="border:0;text-align:center;border-top:1px solid #333">Firma del trabajador</td><td style="border:0"></td><td style="border:0;text-align:center;border-top:1px solid #333">RR. HH.</td></tr></table>
   </body></html>`);
@@ -2999,6 +3065,7 @@ function presEditTag(){
 function newPrestamo(){
   presEditingId=null;
   ["presEmployee","presId","presJob","presStart","presPhone","presSalary","presAmount","presDisb","presReason","presFirst","presApr"].forEach(k=>$(k).value="");
+  $("presAbonos").innerHTML="";
   $("presCuotas").value="1";$("presFreq").value="mensual";$("presDate").value=presIso(new Date());$("presRev").value="Shirley Maya Chavez";
   $("presPreview").classList.remove("show");calcPrestamo();presEditTag();
 }
@@ -3011,6 +3078,9 @@ async function editPrestamo(id){
   $("presEmployee").value=String(r.empleado_id);
   const map={presId:"cedula",presJob:"cargo",presStart:"fecha_ingreso",presPhone:"telefono",presSalary:"sueldo",presAmount:"valor",presDate:"fecha_solicitud",presDisb:"fecha_desembolso",presReason:"motivo",presFreq:"frecuencia",presCuotas:"num_cuotas",presFirst:"fecha_primer_descuento",presRev:"revisado_por",presApr:"aprobado_por"};
   Object.entries(map).forEach(([k,f])=>$(k).value=r[f]??"");
+  $("presAbonos").innerHTML="";(r.abonos||[]).forEach(a=>addPresAbono(a));
+  // la fecha del primer descuento regular (no la de un abono)
+  const firstReg=(r.cronograma||[]).find(c=>c.tipo!=="abono");if(firstReg)$("presFirst").value=firstReg.fecha;
   calcPrestamo();presEditTag();
   $("module-prestamos").scrollIntoView({behavior:"smooth"});
 }
@@ -3036,7 +3106,7 @@ function renderPrestamos(){
   const opt=(r,v,t)=>`<option value="${v}"${r.estado===v?" selected":""}>${t}</option>`;
   $("presHistBody").innerHTML=rows.map(r=>`<tr class="${r.estado==="anulado"?"anulado":""}">
     <td><b>${esc(r.numero)}</b></td><td>${dateEC(r.fecha_solicitud)}</td><td>${esc(r.empleado_nombre)}</td>
-    <td class="r">${money(r.valor)}</td><td>${r.num_cuotas} ${r.frecuencia==="quincenal"?"quinc.":"mens."}</td><td class="r">${money(r.cuota)}</td>
+    <td class="r">${money(r.valor)}</td><td>${r.num_cuotas} ${r.frecuencia==="quincenal"?"quinc.":"mens."}${(r.abonos||[]).length?` + ${(r.abonos||[]).length} abono`:""}</td><td class="r">${money(r.cuota)}</td>
     <td>${dateEC(r.fecha_primer_descuento)} → ${dateEC(r.fecha_ultimo_descuento)}</td><td class="r">${money(presSaldo(r))}</td>
     <td><select data-pres-estado="${r.id}">${opt(r,"solicitado","Solicitado")}${opt(r,"aprobado","Aprobado")}${opt(r,"pagado","Pagado")}${opt(r,"anulado","Anulado")}</select></td>
     <td><button class="mini" data-pres-print="${r.id}">🖨 Reimprimir</button><button class="mini" data-pres-edit="${r.id}">✎ Editar</button></td>
@@ -3644,6 +3714,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   $("presPreviewBtn").addEventListener("click",previewPrestamo);
   $("presPrintBtn").addEventListener("click",printPrestamo);
   $("presNewBtn").addEventListener("click",newPrestamo);
+  $("presAddAbono").addEventListener("click",()=>addPresAbono());
   $("presHistSearch").addEventListener("input",renderPrestamos);
   $("presHistEstado").addEventListener("change",renderPrestamos);
   $("presHistRefresh").addEventListener("click",loadPrestamos);
