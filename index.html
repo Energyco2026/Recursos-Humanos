@@ -413,6 +413,17 @@
     .pres-sched th{font-size:11px;text-transform:uppercase;color:var(--muted)}
     .pres-sched .r{text-align:right}
     @media(max-width:800px){.pres-summary{grid-template-columns:1fr 1fr}}
+    .pres-hist-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+    .pres-hist-filters{display:flex;gap:8px;flex-wrap:wrap}
+    .pres-hist-filters input,.pres-hist-filters select{padding:9px 11px;border:1px solid #d7dee9;border-radius:10px;background:#fff}
+    .pres-hist-wrap{overflow-x:auto;margin-top:6px}
+    .pres-hist td{vertical-align:middle;white-space:nowrap}
+    .pres-hist select{padding:5px 8px;border:1px solid #d7dee9;border-radius:8px;font-size:12px}
+    .pres-hist .mini{padding:5px 9px;border:1px solid #d7dee9;border-radius:8px;background:#fff;cursor:pointer;font-size:12px;margin-left:4px}
+    .pres-hist .mini:hover{border-color:var(--green)}
+    .pres-hist tr.anulado td{color:#94a3b8;text-decoration:line-through}
+    .pres-hist tr.anulado td:nth-last-child(-n+2){text-decoration:none}
+    .pres-edit-tag{align-self:center;margin-right:auto;background:#fff7e6;color:#b45309;border:1px solid #fcd9a6;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:700}
 
     /* ── Empleados inactivos (Resumen) ── */
     .inac-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
@@ -1110,10 +1121,37 @@
             </div>
 
             <div class="btn-row">
+              <span id="presEditTag" class="pres-edit-tag hidden"></span>
+              <button class="btn-secondary" id="presNewBtn">Nueva solicitud</button>
               <button class="btn-secondary" id="presPreviewBtn">Ver cronograma</button>
-              <button class="btn-success" id="presPrintBtn">Imprimir solicitud</button>
+              <button class="btn-success" id="presPrintBtn">Guardar e imprimir</button>
             </div>
             <div id="presPreview" class="preview-box"></div>
+          </div>
+
+          <div class="form-card" style="margin-top:18px">
+            <div class="pres-hist-head">
+              <h3 class="section-title" style="margin:0">Historial de préstamos</h3>
+              <div class="pres-hist-filters">
+                <input id="presHistSearch" placeholder="Buscar colaborador o N.º">
+                <select id="presHistEstado">
+                  <option value="">Todos los estados</option>
+                  <option value="solicitado">Solicitado</option>
+                  <option value="aprobado">Aprobado</option>
+                  <option value="pagado">Pagado</option>
+                  <option value="anulado">Anulado</option>
+                </select>
+                <button class="btn-secondary" id="presHistRefresh">↻ Actualizar</button>
+              </div>
+            </div>
+            <div class="pres-summary" id="presHistKpis"></div>
+            <div class="pres-hist-wrap">
+              <table class="pres-sched pres-hist">
+                <thead><tr><th>N.º</th><th>Fecha</th><th>Colaborador</th><th class="r">Valor</th><th>Cuotas</th><th class="r">Cuota</th><th>Descuentos</th><th class="r">Saldo s/cronograma</th><th>Estado</th><th></th></tr></thead>
+                <tbody id="presHistBody"><tr><td colspan="10">Cargando...</td></tr></tbody>
+              </table>
+            </div>
+            <div class="pres-note">El saldo se estima con las fechas del cronograma (cuotas con fecha ya pasada se consideran descontadas). No está conciliado contra los roles de pago.</div>
           </div>
         </section>
 
@@ -2141,6 +2179,7 @@ function navigateModule(name){
   if(name==="roles" && !rolesLoaded) loadRoles();
   if(name==="costos" && !costsLoaded) loadCosts();
   if(name==="externo" && !externoLoaded) loadExterno();
+  if(name==="prestamos" && !prestamosLoaded) loadPrestamos();
 }
 
 function drillTo(mode){
@@ -2746,8 +2785,8 @@ function presDates(firstIso,n,freq){
   const out=[];if(!firstIso||!n)return out;
   const f=new Date(firstIso+"T12:00:00");
   if(freq==="mensual"){
-    const day=f.getDate();
-    for(let i=0;i<n;i++){const y=f.getFullYear(),m=f.getMonth()+i;const d=new Date(y,m,1,12);d.setDate(Math.min(day,presLastDay(d.getFullYear(),d.getMonth())));out.push(presIso(d));}
+    const day=f.getDate(), finMes=day===presLastDay(f.getFullYear(),f.getMonth());
+    for(let i=0;i<n;i++){const y=f.getFullYear(),m=f.getMonth()+i;const d=new Date(y,m,1,12);const ld=presLastDay(d.getFullYear(),d.getMonth());d.setDate(finMes?ld:Math.min(day,ld));out.push(presIso(d));}
     return out;
   }
   let y=f.getFullYear(),m=f.getMonth(),half=f.getDate()<=15?0:1;
@@ -2799,25 +2838,78 @@ function validPrestamo(){
   if(!$("presFirst").value){alert("Ingresa la fecha del primer descuento.");$("presFirst").focus();return false;}
   return true;
 }
-function printPrestamo(){
-  if(!validPrestamo())return;
+let presEditingId=null, presList=[], prestamosLoaded=false;
+function collectPrestamo(){
   const x=allContracts.find(c=>String(c.empleado_id)===String($("presEmployee").value))||{};
   const rows=presSchedule();
-  const logo=logoSrc();
-  const v=k=>esc($(k).value||"");
-  const blank='<span class="ln">&nbsp;</span>';
-  const val=t=>t?`<span class="fill">${t}</span>`:blank;
-  const fd=iso=>iso?esc(dateEC(iso)):"____ / ____ / ______";
-  const freq=$("presFreq").value;
-  const chk=on=>on?"☒":"☐";
+  return {
+    empleado_id:Number($("presEmployee").value),
+    empleado_nombre:x.empleado_nombre||"",
+    cedula:$("presId").value.trim()||null,
+    cargo:$("presJob").value.trim()||null,
+    fecha_ingreso:$("presStart").value||null,
+    telefono:$("presPhone").value.trim()||null,
+    sueldo:Number($("presSalary").value)||null,
+    valor:Number($("presAmount").value),
+    motivo:$("presReason").value.trim()||null,
+    fecha_solicitud:$("presDate").value||presIso(new Date()),
+    fecha_desembolso:$("presDisb").value||null,
+    frecuencia:$("presFreq").value,
+    num_cuotas:rows.length,
+    cuota:rows[0].cuota,
+    fecha_primer_descuento:$("presFirst").value,
+    fecha_ultimo_descuento:rows[rows.length-1].fecha||null,
+    cronograma:rows,
+    revisado_por:$("presRev").value.trim()||null,
+    aprobado_por:$("presApr").value.trim()||null
+  };
+}
+async function savePrestamo(rec){
+  rec.actualizado_en=new Date().toISOString();
+  if(presEditingId){
+    const {data,error}=await sb.from("prestamos_personal").update(rec).eq("id",presEditingId).select().single();
+    if(error)throw error;return data;
+  }
+  try{const u=await sb.auth.getUser();rec.creado_por=u?.data?.user?.email||null;}catch(_){}
+  const {data,error}=await sb.from("prestamos_personal").insert(rec).select().single();
+  if(error)throw error;return data;
+}
+async function printPrestamo(){
+  if(!validPrestamo())return;
+  // Abrir la ventana antes del await para que el navegador no la bloquee
   const w=window.open("","_blank");
   if(!w)return alert("El navegador bloqueó la ventana. Permite ventanas emergentes para este sitio.");
-  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Solicitud de préstamo - ${esc(x.empleado_nombre||"")}</title><style>
+  w.document.write("<p style='font-family:Arial;padding:20px'>Guardando solicitud...</p>");
+  let saved;
+  try{saved=await savePrestamo(collectPrestamo());}
+  catch(e){w.close();alert("No se pudo guardar el préstamo: "+(e.message||e));return;}
+  presEditingId=saved.id;presEditTag();
+  prestamosLoaded=false;loadPrestamos();
+  writePrestamoDoc(w,saved);
+}
+function reprintPrestamo(id){
+  const r=presList.find(x=>x.id===id);if(!r)return;
+  const w=window.open("","_blank");
+  if(!w)return alert("El navegador bloqueó la ventana. Permite ventanas emergentes para este sitio.");
+  writePrestamoDoc(w,r);
+}
+function writePrestamoDoc(w,r){
+  const rows=(r.cronograma||[]).map(c=>({...c,cuota:Number(c.cuota),saldo:Number(c.saldo)}));
+  const logo=logoSrc();
+  const e=t=>esc(t??"");
+  const blank='<span class="ln">&nbsp;</span>';
+  const val=t=>t?`<span class="fill">${t}</span>`:blank;
+  const fd=iso=>iso?esc(dateEC(String(iso).slice(0,10))):"____ / ____ / ______";
+  const chk=on=>on?"☒":"☐";
+  const first=rows[0]?.cuota||Number(r.cuota), last=rows[rows.length-1]?.cuota||first;
+  const head=t=>`<div class="hd">${logo?`<img src="${logo}" alt="ENERGYCONTROL">`:'<b style="color:#24864B;font-size:15px">ENERGY CONTROL</b>'}<div class="t">${t}<br><span class="num">N.º ${e(r.numero)}</span></div></div>`;
+  w.document.open();
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Préstamo ${e(r.numero)} - ${e(r.empleado_nombre)}</title><style>
   @page{size:A4;margin:14mm 16mm}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box}
   body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;font-size:11px;margin:0}
   .hd{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #24864B;padding-bottom:8px;margin-bottom:12px}
-  .hd img{height:46px}.hd .t{font-weight:700;color:#183A32;font-size:12px;text-align:right}
+  .hd img{height:46px}.hd .t{font-weight:700;color:#183A32;font-size:12px;text-align:right}.num{color:#b91c1c;font-size:12px}
   h1{text-align:center;font-size:16px;color:#183A32;margin:6px 0 4px;letter-spacing:.03em}
   .fecha{text-align:right;margin-bottom:10px}
   .sec{background:#183A32;color:#fff;font-weight:700;padding:5px 8px;margin:12px 0 6px;font-size:11.5px}
@@ -2836,34 +2928,34 @@ function printPrestamo(){
   .sched td{padding:3px 6px;border:1px solid #cbd5e1}.r{text-align:right}
   .pb{page-break-before:always}
   </style></head><body>
-  <div class="hd">${logo?`<img src="${logo}" alt="ENERGYCONTROL">`:'<b style="color:#24864B;font-size:15px">ENERGY CONTROL</b>'}<div class="t">FORMATO DE PRÉSTAMO AL PERSONAL</div></div>
+  ${head("FORMATO DE PRÉSTAMO AL PERSONAL")}
   <h1>SOLICITUD Y AUTORIZACIÓN DE PRÉSTAMO</h1>
-  <div class="fecha"><b>Fecha:</b> ${fd($("presDate").value||presIso(new Date()))}</div>
+  <div class="fecha"><b>Fecha:</b> ${fd(r.fecha_solicitud)}</div>
 
   <div class="sec">1. DATOS DEL TRABAJADOR</div>
   <table class="f">
-    <tr><td class="l">Nombres y apellidos:</td><td>${val(esc(x.empleado_nombre||""))}</td></tr>
-    <tr><td class="l">Cédula / identificación:</td><td>${val(v("presId"))}</td></tr>
-    <tr><td class="l">Cargo / área / obra:</td><td>${val(v("presJob"))}</td></tr>
-    <tr><td class="l">Fecha de ingreso:</td><td>${val(fd($("presStart").value))} &nbsp; <b style="color:#183A32">Teléfono:</b> ${$("presPhone").value.trim()?`<span class="fill" style="min-width:25%">${v("presPhone")}</span>`:'<span style="display:inline-block;width:28%;border-bottom:1px solid #64748b">&nbsp;</span>'}</td></tr>
+    <tr><td class="l">Nombres y apellidos:</td><td>${val(e(r.empleado_nombre))}</td></tr>
+    <tr><td class="l">Cédula / identificación:</td><td>${val(e(r.cedula))}</td></tr>
+    <tr><td class="l">Cargo / área / obra:</td><td>${val(e(r.cargo))}</td></tr>
+    <tr><td class="l">Fecha de ingreso:</td><td>${val(fd(r.fecha_ingreso))} &nbsp; <b style="color:#183A32">Teléfono:</b> ${r.telefono?`<span class="fill" style="min-width:25%">${e(r.telefono)}</span>`:'<span style="display:inline-block;width:28%;border-bottom:1px solid #64748b">&nbsp;</span>'}</td></tr>
   </table>
 
   <div class="sec">2. DETALLE DEL PRÉSTAMO SOLICITADO</div>
   <table class="f">
-    <tr><td class="l">Valor solicitado (USD):</td><td>${val("$ "+esc(money($("presAmount").value)))}</td></tr>
-    <tr><td class="l">Motivo de la solicitud:</td><td>${$("presReason").value.trim()?`<span class="fill" style="min-width:100%">${v("presReason")}</span>`:blank+"<br>"+blank}</td></tr>
-    <tr><td class="l">Fecha de desembolso solicitada:</td><td>${val(fd($("presDisb").value))}</td></tr>
-    <tr><td class="l">Número de cuotas:</td><td>${val(esc(rows.length))}</td></tr>
-    <tr><td class="l">Valor de cada cuota (USD):</td><td>${val("$ "+esc(money(rows[0].cuota))+(rows[rows.length-1].cuota!==rows[0].cuota?` (última: ${esc(money(rows[rows.length-1].cuota))})`:""))}</td></tr>
+    <tr><td class="l">Valor solicitado (USD):</td><td>${val("$ "+e(money(r.valor)))}</td></tr>
+    <tr><td class="l">Motivo de la solicitud:</td><td>${r.motivo?`<span class="fill" style="min-width:100%">${e(r.motivo)}</span>`:blank+"<br>"+blank}</td></tr>
+    <tr><td class="l">Fecha de desembolso solicitada:</td><td>${val(fd(r.fecha_desembolso))}</td></tr>
+    <tr><td class="l">Número de cuotas:</td><td>${val(e(r.num_cuotas))}</td></tr>
+    <tr><td class="l">Valor de cada cuota (USD):</td><td>${val("$ "+e(money(first))+(last!==first?` (última: ${e(money(last))})`:""))}</td></tr>
   </table>
 
   <div class="sec">3. FORMA DE PAGO Y AUTORIZACIÓN DE DESCUENTO</div>
   <p>Solicito a ENERGY CONTROL la aprobación del préstamo descrito en este formulario. En caso de aprobación, acepto el cronograma de devolución acordado y autorizo expresamente los descuentos de nómina que correspondan, conforme a la normativa aplicable. Toda modificación del monto o calendario deberá documentarse y contar con la autorización correspondiente.</p>
   <table class="f">
-    <tr><td class="l">Inicio de descuento:</td><td>${val(fd($("presFirst").value))}</td></tr>
-    <tr><td class="l">Frecuencia:</td><td>${chk(freq==="quincenal")} Quincenal &nbsp;&nbsp; ${chk(freq==="mensual")} Mensual &nbsp;&nbsp; ☐ Otra: ________</td></tr>
-    <tr><td class="l">Cuota acordada:</td><td>${val("USD "+esc(money(rows[0].cuota)))}</td></tr>
-    <tr><td class="l">Saldo total a recuperar:</td><td>${val("USD "+esc(money($("presAmount").value)))}</td></tr>
+    <tr><td class="l">Inicio de descuento:</td><td>${val(fd(r.fecha_primer_descuento))}</td></tr>
+    <tr><td class="l">Frecuencia:</td><td>${chk(r.frecuencia==="quincenal")} Quincenal &nbsp;&nbsp; ${chk(r.frecuencia==="mensual")} Mensual &nbsp;&nbsp; ☐ Otra: ________</td></tr>
+    <tr><td class="l">Cuota acordada:</td><td>${val("USD "+e(money(first)))}</td></tr>
+    <tr><td class="l">Saldo total a recuperar:</td><td>${val("USD "+e(money(r.valor)))}</td></tr>
   </table>
 
   <div class="sec">4. DECLARACIÓN Y FIRMAS</div>
@@ -2871,9 +2963,9 @@ function printPrestamo(){
   <table class="firmas">
     <tr><th>TRABAJADOR SOLICITANTE</th><th>REVISIÓN FINANCIERA / RR. HH.</th><th>APROBACIÓN GERENCIAL</th></tr>
     <tr>
-      <td><div class="sp"></div>Firma: ____________________<br><br>Nombre: ${esc(x.empleado_nombre||"")}<br><br>Fecha: ____ / ____ / ______</td>
-      <td><div class="sp"></div>Firma: ____________________<br><br>Nombre: ${v("presRev")}<br><br>Fecha: ____ / ____ / ______</td>
-      <td><div class="sp"></div>Firma: ____________________<br><br>Nombre: ${v("presApr")}<br><br>Fecha: ____ / ____ / ______</td>
+      <td><div class="sp"></div>Firma: ____________________<br><br>Nombre: ${e(r.empleado_nombre)}<br><br>Fecha: ____ / ____ / ______</td>
+      <td><div class="sp"></div>Firma: ____________________<br><br>Nombre: ${e(r.revisado_por)}<br><br>Fecha: ____ / ____ / ______</td>
+      <td><div class="sp"></div>Firma: ____________________<br><br>Nombre: ${e(r.aprobado_por)}<br><br>Fecha: ____ / ____ / ______</td>
     </tr>
   </table>
 
@@ -2882,14 +2974,14 @@ function printPrestamo(){
     <tr><td class="l">Código / referencia en Odoo:</td><td>${blank}</td></tr>
     <tr><td class="l">Cuenta contable por cobrar:</td><td>${blank}</td></tr>
     <tr><td class="l">Fecha y referencia del pago:</td><td>${blank}</td></tr>
-    <tr><td class="l">Observaciones:</td><td>${blank}</td></tr>
+    <tr><td class="l">Observaciones:</td><td>${r.observaciones?val(e(r.observaciones)):blank}</td></tr>
   </table>
 
   <div class="pb"></div>
-  <div class="hd">${logo?`<img src="${logo}" alt="ENERGYCONTROL">`:'<b style="color:#24864B;font-size:15px">ENERGY CONTROL</b>'}<div class="t">ANEXO · CRONOGRAMA DE DESCUENTOS</div></div>
-  <p><b>Trabajador:</b> ${esc(x.empleado_nombre||"")} &nbsp; · &nbsp; <b>Cédula:</b> ${v("presId")} &nbsp; · &nbsp; <b>Préstamo:</b> ${esc(money($("presAmount").value))} en ${rows.length} cuota(s) ${freq==="quincenal"?"quincenales":"mensuales"}</p>
+  ${head("ANEXO · CRONOGRAMA DE DESCUENTOS")}
+  <p><b>Trabajador:</b> ${e(r.empleado_nombre)} &nbsp; · &nbsp; <b>Cédula:</b> ${e(r.cedula)} &nbsp; · &nbsp; <b>Préstamo:</b> ${e(money(r.valor))} en ${e(r.num_cuotas)} cuota(s) ${r.frecuencia==="quincenal"?"quincenales":"mensuales"}</p>
   <table class="sched"><thead><tr><th>#</th><th>Fecha de descuento</th><th class="r">Cuota</th><th class="r">Saldo pendiente</th></tr></thead><tbody>
-  ${rows.map(r=>`<tr><td>${r.n}</td><td>${r.fecha?esc(dateEC(r.fecha)):"—"}</td><td class="r">${esc(money(r.cuota))}</td><td class="r">${esc(money(r.saldo))}</td></tr>`).join("")}
+  ${rows.map(c=>`<tr><td>${c.n}</td><td>${c.fecha?fd(c.fecha):"—"}</td><td class="r">${e(money(c.cuota))}</td><td class="r">${e(money(c.saldo))}</td></tr>`).join("")}
   </tbody></table>
   <table class="firmas" style="margin-top:40px;width:66%"><tr><td style="border:0;text-align:center;border-top:1px solid #333">Firma del trabajador</td><td style="border:0"></td><td style="border:0;text-align:center;border-top:1px solid #333">RR. HH.</td></tr></table>
   </body></html>`);
@@ -2897,6 +2989,65 @@ function printPrestamo(){
   let impreso=false;const imprimir=()=>{if(impreso)return;impreso=true;try{w.focus();w.print();}catch(_){}};
   w.onload=()=>setTimeout(imprimir,300);
   setTimeout(imprimir,1500);
+}
+function presEditTag(){
+  const r=presList.find(x=>x.id===presEditingId);
+  $("presEditTag").classList.toggle("hidden",!presEditingId);
+  $("presEditTag").textContent=presEditingId?`Editando ${r?.numero||"PR-"+String(presEditingId).padStart(4,"0")} · los cambios se guardan sobre el mismo préstamo`:"";
+  $("presPrintBtn").textContent=presEditingId?"Guardar cambios e imprimir":"Guardar e imprimir";
+}
+function newPrestamo(){
+  presEditingId=null;
+  ["presEmployee","presId","presJob","presStart","presPhone","presSalary","presAmount","presDisb","presReason","presFirst","presApr"].forEach(k=>$(k).value="");
+  $("presCuotas").value="1";$("presFreq").value="mensual";$("presDate").value=presIso(new Date());$("presRev").value="Shirley Maya Chavez";
+  $("presPreview").classList.remove("show");calcPrestamo();presEditTag();
+}
+async function editPrestamo(id){
+  const r=presList.find(x=>x.id===id);if(!r)return;
+  presEditingId=r.id;
+  if(![...$("presEmployee").options].some(o=>o.value===String(r.empleado_id))){
+    $("presEmployee").insertAdjacentHTML("beforeend",`<option value="${r.empleado_id}">${esc(r.empleado_nombre)} (inactivo)</option>`);
+  }
+  $("presEmployee").value=String(r.empleado_id);
+  const map={presId:"cedula",presJob:"cargo",presStart:"fecha_ingreso",presPhone:"telefono",presSalary:"sueldo",presAmount:"valor",presDate:"fecha_solicitud",presDisb:"fecha_desembolso",presReason:"motivo",presFreq:"frecuencia",presCuotas:"num_cuotas",presFirst:"fecha_primer_descuento",presRev:"revisado_por",presApr:"aprobado_por"};
+  Object.entries(map).forEach(([k,f])=>$(k).value=r[f]??"");
+  calcPrestamo();presEditTag();
+  $("module-prestamos").scrollIntoView({behavior:"smooth"});
+}
+function presSaldo(r){
+  if(r.estado==="anulado"||r.estado==="pagado")return 0;
+  const hoy=presIso(new Date());
+  return (r.cronograma||[]).filter(c=>c.fecha&&c.fecha>hoy).reduce((a,c)=>a+Number(c.cuota||0),0);
+}
+async function loadPrestamos(){
+  const {data,error}=await sb.from("prestamos_personal").select("*").order("id",{ascending:false});
+  if(error){$("presHistBody").innerHTML=`<tr><td colspan="10">No se pudo cargar el historial: ${esc(error.message)}</td></tr>`;return;}
+  presList=data||[];prestamosLoaded=true;renderPrestamos();presEditTag();
+}
+function renderPrestamos(){
+  const q=($("presHistSearch").value||"").toLowerCase().trim(), est=$("presHistEstado").value;
+  const rows=presList.filter(r=>(!est||r.estado===est)&&(!q||`${r.empleado_nombre} ${r.numero} ${r.cedula||""}`.toLowerCase().includes(q)));
+  const vivos=presList.filter(r=>r.estado!=="anulado");
+  const saldo=vivos.reduce((a,r)=>a+presSaldo(r),0);
+  $("presHistKpis").innerHTML=`<div><span>Préstamos registrados</span><b>${vivos.length}</b></div>
+    <div><span>Total prestado</span><b>${money(vivos.reduce((a,r)=>a+Number(r.valor),0))}</b></div>
+    <div><span>Saldo por recuperar</span><b>${money(saldo)}</b></div>
+    <div><span>Pendientes de aprobar</span><b>${presList.filter(r=>r.estado==="solicitado").length}</b></div>`;
+  const opt=(r,v,t)=>`<option value="${v}"${r.estado===v?" selected":""}>${t}</option>`;
+  $("presHistBody").innerHTML=rows.map(r=>`<tr class="${r.estado==="anulado"?"anulado":""}">
+    <td><b>${esc(r.numero)}</b></td><td>${dateEC(r.fecha_solicitud)}</td><td>${esc(r.empleado_nombre)}</td>
+    <td class="r">${money(r.valor)}</td><td>${r.num_cuotas} ${r.frecuencia==="quincenal"?"quinc.":"mens."}</td><td class="r">${money(r.cuota)}</td>
+    <td>${dateEC(r.fecha_primer_descuento)} → ${dateEC(r.fecha_ultimo_descuento)}</td><td class="r">${money(presSaldo(r))}</td>
+    <td><select data-pres-estado="${r.id}">${opt(r,"solicitado","Solicitado")}${opt(r,"aprobado","Aprobado")}${opt(r,"pagado","Pagado")}${opt(r,"anulado","Anulado")}</select></td>
+    <td><button class="mini" data-pres-print="${r.id}">🖨 Reimprimir</button><button class="mini" data-pres-edit="${r.id}">✎ Editar</button></td>
+  </tr>`).join("")||'<tr><td colspan="10">Aún no hay préstamos registrados.</td></tr>';
+}
+async function setPrestamoEstado(id,estado){
+  const r=presList.find(x=>x.id===id);
+  if(estado==="anulado"&&!confirm(`¿Anular el préstamo ${r?.numero}? Quedará en el historial marcado como anulado.`)){renderPrestamos();return;}
+  const {error}=await sb.from("prestamos_personal").update({estado,actualizado_en:new Date().toISOString()}).eq("id",id);
+  if(error){alert("No se pudo cambiar el estado: "+error.message);renderPrestamos();return;}
+  if(r)r.estado=estado;renderPrestamos();
 }
 
 /* ============================================================
@@ -3492,6 +3643,19 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   ["presAmount","presCuotas","presFirst","presFreq"].forEach(k=>{$(k).addEventListener("input",calcPrestamo);$(k).addEventListener("change",calcPrestamo)});
   $("presPreviewBtn").addEventListener("click",previewPrestamo);
   $("presPrintBtn").addEventListener("click",printPrestamo);
+  $("presNewBtn").addEventListener("click",newPrestamo);
+  $("presHistSearch").addEventListener("input",renderPrestamos);
+  $("presHistEstado").addEventListener("change",renderPrestamos);
+  $("presHistRefresh").addEventListener("click",loadPrestamos);
+  $("presHistBody").addEventListener("click",ev=>{
+    const p=ev.target.closest("[data-pres-print]"),e=ev.target.closest("[data-pres-edit]");
+    if(p)reprintPrestamo(Number(p.dataset.presPrint));
+    if(e)editPrestamo(Number(e.dataset.presEdit));
+  });
+  $("presHistBody").addEventListener("change",ev=>{
+    const sel=ev.target.closest("[data-pres-estado]");
+    if(sel)setPrestamoEstado(Number(sel.dataset.presEstado),sel.value);
+  });
   {const t=new Date();$("presDate").value=presIso(t);}
 
   $("rolesRefreshBtn").addEventListener("click",()=>{rolesLoaded=false;costsLoaded=false;loadRoles()});
