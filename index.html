@@ -401,6 +401,19 @@
       .print-footer{margin-top:22px;font-size:11px;color:var(--muted);text-align:center}
     }
 
+    /* ── Solicitud de préstamos ── */
+    .pres-summary{display:grid;grid-template-columns:repeat(4,minmax(140px,1fr));gap:10px;margin-top:16px}
+    .pres-summary div{background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+    .pres-summary span{display:block;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+    .pres-summary b{display:block;font-size:20px;color:var(--navy);margin-top:3px}
+    .pres-summary .warn b{color:#b45309}
+    .pres-note{font-size:12px;color:var(--muted);margin-top:8px}
+    .pres-sched{width:100%;min-width:0!important;border-collapse:collapse;font-size:13px;margin-top:10px}
+    .pres-sched th,.pres-sched td{border-bottom:1px solid var(--line);padding:7px 10px;text-align:left}
+    .pres-sched th{font-size:11px;text-transform:uppercase;color:var(--muted)}
+    .pres-sched .r{text-align:right}
+    @media(max-width:800px){.pres-summary{grid-template-columns:1fr 1fr}}
+
     /* ── Empleados inactivos (Resumen) ── */
     .inac-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
     .inac-count{display:inline-block;background:#e5e7eb;color:#475569;border-radius:999px;padding:2px 10px;font-size:13px;margin-left:6px;vertical-align:middle}
@@ -537,6 +550,7 @@
       <button class="nav-btn" data-module="tipos"><span class="nav-icon">?</span>Tipos de contrato</button>
       <button class="nav-btn" data-module="vacaciones"><span class="nav-icon">☀</span>Vacaciones</button>
       <button class="nav-btn" data-module="certificados"><span class="nav-icon">▣</span>Certificados laborales</button>
+      <button class="nav-btn" data-module="prestamos"><span class="nav-icon">⇄</span>Solicitud de préstamos</button>
       <button class="nav-btn" data-module="roles"><span class="nav-icon">$</span>Roles de pago</button>
       <button class="nav-btn" data-module="costos"><span class="nav-icon">🔒</span>Costo de personal</button>
       <button class="nav-btn" data-module="externo"><span class="nav-icon">🧾</span>Personal por facturación</button>
@@ -1040,6 +1054,69 @@
           </div>
         </section>
 
+        <section id="module-prestamos" class="module">
+          <div class="page-heading">
+            <div>
+              <h2>Solicitud de préstamos</h2>
+              <p>Selecciona el colaborador, define el monto y las cuotas, e imprime el formato con el logo de ENERGYCONTROL.</p>
+            </div>
+          </div>
+          <div class="form-card">
+            <h3 class="section-title">1. Datos del trabajador</h3>
+            <div class="form-grid">
+              <div class="form-group span-2">
+                <label>Colaborador</label>
+                <select id="presEmployee"><option value="">Selecciona un colaborador...</option></select>
+              </div>
+              <div class="form-group"><label>Cédula</label><input id="presId"></div>
+              <div class="form-group"><label>Cargo / área / obra</label><input id="presJob"></div>
+              <div class="form-group"><label>Fecha de ingreso</label><input id="presStart" type="date"></div>
+              <div class="form-group"><label>Teléfono</label><input id="presPhone" placeholder="Opcional"></div>
+              <div class="form-group"><label>Sueldo mensual (referencia)</label><input id="presSalary" type="number" step="0.01" readonly></div>
+            </div>
+
+            <h3 class="section-title">2. Detalle del préstamo</h3>
+            <div class="form-grid">
+              <div class="form-group"><label>Valor solicitado USD</label><input id="presAmount" type="number" step="0.01" min="0"></div>
+              <div class="form-group"><label>Fecha de desembolso</label><input id="presDisb" type="date"></div>
+              <div class="form-group"><label>Fecha de la solicitud</label><input id="presDate" type="date"></div>
+              <div class="form-group span-3" style="grid-column:1/-1"><label>Motivo de la solicitud</label><textarea id="presReason" style="min-height:60px"></textarea></div>
+            </div>
+
+            <h3 class="section-title">3. Forma de pago y descuento</h3>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Frecuencia de descuento</label>
+                <select id="presFreq">
+                  <option value="mensual">Mensual</option>
+                  <option value="quincenal">Quincenal</option>
+                </select>
+              </div>
+              <div class="form-group"><label>Número de cuotas</label><input id="presCuotas" type="number" min="1" step="1" value="1"></div>
+              <div class="form-group"><label>Fecha del primer descuento</label><input id="presFirst" type="date"></div>
+            </div>
+            <div class="pres-summary">
+              <div><span>Cuota</span><b id="presCuotaOut">—</b></div>
+              <div><span>Saldo total a recuperar</span><b id="presTotalOut">—</b></div>
+              <div><span>Último descuento</span><b id="presLastOut">—</b></div>
+              <div id="presPctBox"><span>Cuota vs. sueldo mensual</span><b id="presPctOut">—</b></div>
+            </div>
+            <div class="pres-note" id="presNote"></div>
+
+            <h3 class="section-title" style="margin-top:18px">4. Firmas</h3>
+            <div class="form-grid">
+              <div class="form-group"><label>Revisión financiera / RR.HH.</label><input id="presRev" value="Shirley Maya Chavez"></div>
+              <div class="form-group"><label>Aprobación gerencial</label><input id="presApr" placeholder="Nombre de quien aprueba"></div>
+            </div>
+
+            <div class="btn-row">
+              <button class="btn-secondary" id="presPreviewBtn">Ver cronograma</button>
+              <button class="btn-success" id="presPrintBtn">Imprimir solicitud</button>
+            </div>
+            <div id="presPreview" class="preview-box"></div>
+          </div>
+        </section>
+
         <section id="module-roles" class="module">
           <div class="page-heading">
             <div><h2>Roles de pago</h2><p>Consulta de roles de pago cargados por periodo y colaborador.</p></div>
@@ -1467,6 +1544,7 @@ function buildFilters(){
   $("genEmployee").innerHTML = '<option value="">Selecciona un colaborador...</option>' +
     uniqueEmployees.map(x=>`<option value="${x.empleado_id}">${esc(x.empleado_nombre)}</option>`).join("");
   buildCertEmployeeOptions();
+  buildPresEmployeeOptions();
   $("rolEmployeeFilter").innerHTML = '<option value="">Todos los colaboradores</option>' +
     uniqueEmployees.map(x=>`<option value="${esc(x.empleado_nombre)}">${esc(x.empleado_nombre)}</option>`).join("");
 }
@@ -1855,6 +1933,7 @@ async function loadInactivos(){
   $("inacType").innerHTML = '<option value="">Todos los tipos de contrato</option>' + types.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join("");
   renderInactivos();
   buildCertEmployeeOptions();
+  buildPresEmployeeOptions();
 }
 
 function filteredInactivos(){
@@ -2633,6 +2712,194 @@ function printCommission(){
 }
 
 /* ============================================================
+   SOLICITUD DE PRÉSTAMOS
+============================================================ */
+function presIso(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`}
+function presLastDay(y,m){return new Date(y,m+1,0).getDate()}
+function buildPresEmployeeOptions(){
+  if(!$("presEmployee"))return;
+  const prev=$("presEmployee").value;
+  const seen=new Set();
+  const activos=allContracts
+    .filter(x=>x.empleado_id&&!seen.has(x.empleado_id)&&seen.add(x.empleado_id))
+    .sort((a,b)=>(a.empleado_nombre||"").localeCompare(b.empleado_nombre||"","es"));
+  $("presEmployee").innerHTML='<option value="">Selecciona un colaborador...</option>'+
+    activos.map(x=>`<option value="${x.empleado_id}">${esc(x.empleado_nombre)}</option>`).join("");
+  if(prev)$("presEmployee").value=prev;
+}
+async function fillPresEmployee(){
+  const id=$("presEmployee").value;
+  const x=allContracts.find(c=>String(c.empleado_id)===String(id));
+  $("presId").value="";$("presId").placeholder="";
+  if(!x){["presJob","presStart","presSalary"].forEach(k=>$(k).value="");calcPrestamo();return;}
+  const area=x.departamento||x._departamento||"";
+  $("presJob").value=[x.cargo,area].filter(Boolean).join(" / ");
+  $("presStart").value=x.fecha_antiguedad||x.fecha_inicio||"";
+  $("presSalary").value=x.salario||"";
+  const ced=await certCedula(id);
+  if($("presEmployee").value===id){$("presId").value=ced;if(!ced)$("presId").placeholder="Sin cédula en roles: escríbela";}
+  calcPrestamo();
+}
+// Fechas de descuento: mensual = mismo día cada mes (ajustado a fin de mes);
+// quincenal = alterna día 15 y último día del mes, empezando por la primera fecha >= fecha inicial.
+function presDates(firstIso,n,freq){
+  const out=[];if(!firstIso||!n)return out;
+  const f=new Date(firstIso+"T12:00:00");
+  if(freq==="mensual"){
+    const day=f.getDate();
+    for(let i=0;i<n;i++){const y=f.getFullYear(),m=f.getMonth()+i;const d=new Date(y,m,1,12);d.setDate(Math.min(day,presLastDay(d.getFullYear(),d.getMonth())));out.push(presIso(d));}
+    return out;
+  }
+  let y=f.getFullYear(),m=f.getMonth(),half=f.getDate()<=15?0:1;
+  for(let i=0;i<n;i++){
+    const d=new Date(y,m,half===0?15:presLastDay(y,m),12);out.push(presIso(d));
+    if(half===0)half=1;else{half=0;m++;if(m>11){m=0;y++;}}
+  }
+  return out;
+}
+function presSchedule(){
+  const amount=Math.round(Number($("presAmount").value||0)*100);
+  const n=Math.max(0,parseInt($("presCuotas").value||0,10));
+  if(!amount||!n)return [];
+  const base=Math.floor(amount/n),resto=amount-base*n;
+  const dates=presDates($("presFirst").value,n,$("presFreq").value);
+  let saldo=amount;const rows=[];
+  for(let i=0;i<n;i++){const c=base+(i===n-1?resto:0);saldo-=c;rows.push({n:i+1,fecha:dates[i]||"",cuota:c/100,saldo:saldo/100});}
+  return rows;
+}
+function calcPrestamo(){
+  const rows=presSchedule();
+  const amount=Number($("presAmount").value||0);
+  const cuota=rows.length?rows[0].cuota:0;
+  const ultima=rows.length?rows[rows.length-1]:null;
+  $("presCuotaOut").textContent=rows.length?money(cuota):"—";
+  $("presTotalOut").textContent=amount?money(amount):"—";
+  $("presLastOut").textContent=ultima&&ultima.fecha?dateEC(ultima.fecha):"—";
+  const sal=Number($("presSalary").value||0);
+  const mensual=$("presFreq").value==="quincenal"?cuota*2:cuota;
+  const pct=sal&&cuota?mensual/sal*100:0;
+  $("presPctOut").textContent=pct?pct.toFixed(1)+"%":"—";
+  $("presPctBox").classList.toggle("warn",pct>30);
+  const notes=[];
+  if(rows.length&&ultima.cuota!==cuota)notes.push(`La última cuota se ajusta a ${money(ultima.cuota)} por redondeo.`);
+  if($("presFreq").value==="quincenal"&&cuota)notes.push(`Descuento mensual equivalente: ${money(mensual)}.`);
+  $("presNote").textContent=notes.join(" ");
+}
+function previewPrestamo(){
+  const rows=presSchedule();
+  if(!rows.length){alert("Ingresa el valor y el número de cuotas.");return;}
+  $("presPreview").innerHTML=`<b>Cronograma de descuentos</b><table class="pres-sched"><thead><tr><th>#</th><th>Fecha</th><th class="r">Cuota</th><th class="r">Saldo</th></tr></thead><tbody>${
+    rows.map(r=>`<tr><td>${r.n}</td><td>${r.fecha?dateEC(r.fecha):"—"}</td><td class="r">${money(r.cuota)}</td><td class="r">${money(r.saldo)}</td></tr>`).join("")}</tbody></table>`;
+  $("presPreview").classList.add("show");
+}
+function validPrestamo(){
+  if(!$("presEmployee").value){alert("Selecciona un colaborador.");return false;}
+  if(!(Number($("presAmount").value)>0)){alert("Ingresa el valor solicitado.");$("presAmount").focus();return false;}
+  if(!(parseInt($("presCuotas").value,10)>=1)){alert("Ingresa el número de cuotas.");$("presCuotas").focus();return false;}
+  if(!$("presFirst").value){alert("Ingresa la fecha del primer descuento.");$("presFirst").focus();return false;}
+  return true;
+}
+function printPrestamo(){
+  if(!validPrestamo())return;
+  const x=allContracts.find(c=>String(c.empleado_id)===String($("presEmployee").value))||{};
+  const rows=presSchedule();
+  const logo=logoSrc();
+  const v=k=>esc($(k).value||"");
+  const blank='<span class="ln">&nbsp;</span>';
+  const val=t=>t?`<span class="fill">${t}</span>`:blank;
+  const fd=iso=>iso?esc(dateEC(iso)):"____ / ____ / ______";
+  const freq=$("presFreq").value;
+  const chk=on=>on?"☒":"☐";
+  const w=window.open("","_blank");
+  if(!w)return alert("El navegador bloqueó la ventana. Permite ventanas emergentes para este sitio.");
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Solicitud de préstamo - ${esc(x.empleado_nombre||"")}</title><style>
+  @page{size:A4;margin:14mm 16mm}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box}
+  body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;font-size:11px;margin:0}
+  .hd{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #24864B;padding-bottom:8px;margin-bottom:12px}
+  .hd img{height:46px}.hd .t{font-weight:700;color:#183A32;font-size:12px;text-align:right}
+  h1{text-align:center;font-size:16px;color:#183A32;margin:6px 0 4px;letter-spacing:.03em}
+  .fecha{text-align:right;margin-bottom:10px}
+  .sec{background:#183A32;color:#fff;font-weight:700;padding:5px 8px;margin:12px 0 6px;font-size:11.5px}
+  table.f{width:100%;border-collapse:collapse}
+  table.f td{padding:5px 4px;vertical-align:bottom}
+  table.f td.l{width:34%;font-weight:700;color:#183A32}
+  .fill{display:inline-block;min-width:60%;border-bottom:1px solid #64748b;padding:0 3px}
+  .ln{display:inline-block;width:100%;border-bottom:1px solid #64748b}
+  p{text-align:justify;line-height:1.45;margin:6px 0}
+  .firmas{width:100%;border-collapse:collapse;margin-top:8px}
+  .firmas td{width:33.3%;border:1px solid #94a3b8;padding:8px;vertical-align:top}
+  .firmas th{background:#e8f3ec;border:1px solid #94a3b8;padding:6px;font-size:10.5px;color:#183A32}
+  .firmas .sp{height:46px}
+  .sched{width:100%;border-collapse:collapse;margin-top:4px}
+  .sched th{background:#e8f3ec;color:#183A32;font-size:10px;text-transform:uppercase;padding:4px 6px;border:1px solid #cbd5e1}
+  .sched td{padding:3px 6px;border:1px solid #cbd5e1}.r{text-align:right}
+  .pb{page-break-before:always}
+  </style></head><body>
+  <div class="hd">${logo?`<img src="${logo}" alt="ENERGYCONTROL">`:'<b style="color:#24864B;font-size:15px">ENERGY CONTROL</b>'}<div class="t">FORMATO DE PRÉSTAMO AL PERSONAL</div></div>
+  <h1>SOLICITUD Y AUTORIZACIÓN DE PRÉSTAMO</h1>
+  <div class="fecha"><b>Fecha:</b> ${fd($("presDate").value||presIso(new Date()))}</div>
+
+  <div class="sec">1. DATOS DEL TRABAJADOR</div>
+  <table class="f">
+    <tr><td class="l">Nombres y apellidos:</td><td>${val(esc(x.empleado_nombre||""))}</td></tr>
+    <tr><td class="l">Cédula / identificación:</td><td>${val(v("presId"))}</td></tr>
+    <tr><td class="l">Cargo / área / obra:</td><td>${val(v("presJob"))}</td></tr>
+    <tr><td class="l">Fecha de ingreso:</td><td>${val(fd($("presStart").value))} &nbsp; <b style="color:#183A32">Teléfono:</b> ${$("presPhone").value.trim()?`<span class="fill" style="min-width:25%">${v("presPhone")}</span>`:'<span style="display:inline-block;width:28%;border-bottom:1px solid #64748b">&nbsp;</span>'}</td></tr>
+  </table>
+
+  <div class="sec">2. DETALLE DEL PRÉSTAMO SOLICITADO</div>
+  <table class="f">
+    <tr><td class="l">Valor solicitado (USD):</td><td>${val("$ "+esc(money($("presAmount").value)))}</td></tr>
+    <tr><td class="l">Motivo de la solicitud:</td><td>${$("presReason").value.trim()?`<span class="fill" style="min-width:100%">${v("presReason")}</span>`:blank+"<br>"+blank}</td></tr>
+    <tr><td class="l">Fecha de desembolso solicitada:</td><td>${val(fd($("presDisb").value))}</td></tr>
+    <tr><td class="l">Número de cuotas:</td><td>${val(esc(rows.length))}</td></tr>
+    <tr><td class="l">Valor de cada cuota (USD):</td><td>${val("$ "+esc(money(rows[0].cuota))+(rows[rows.length-1].cuota!==rows[0].cuota?` (última: ${esc(money(rows[rows.length-1].cuota))})`:""))}</td></tr>
+  </table>
+
+  <div class="sec">3. FORMA DE PAGO Y AUTORIZACIÓN DE DESCUENTO</div>
+  <p>Solicito a ENERGY CONTROL la aprobación del préstamo descrito en este formulario. En caso de aprobación, acepto el cronograma de devolución acordado y autorizo expresamente los descuentos de nómina que correspondan, conforme a la normativa aplicable. Toda modificación del monto o calendario deberá documentarse y contar con la autorización correspondiente.</p>
+  <table class="f">
+    <tr><td class="l">Inicio de descuento:</td><td>${val(fd($("presFirst").value))}</td></tr>
+    <tr><td class="l">Frecuencia:</td><td>${chk(freq==="quincenal")} Quincenal &nbsp;&nbsp; ${chk(freq==="mensual")} Mensual &nbsp;&nbsp; ☐ Otra: ________</td></tr>
+    <tr><td class="l">Cuota acordada:</td><td>${val("USD "+esc(money(rows[0].cuota)))}</td></tr>
+    <tr><td class="l">Saldo total a recuperar:</td><td>${val("USD "+esc(money($("presAmount").value)))}</td></tr>
+  </table>
+
+  <div class="sec">4. DECLARACIÓN Y FIRMAS</div>
+  <p>Declaro que la información proporcionada es correcta y que he leído las condiciones del préstamo. La aprobación queda sujeta a la revisión y autorización de la empresa.</p>
+  <table class="firmas">
+    <tr><th>TRABAJADOR SOLICITANTE</th><th>REVISIÓN FINANCIERA / RR. HH.</th><th>APROBACIÓN GERENCIAL</th></tr>
+    <tr>
+      <td><div class="sp"></div>Firma: ____________________<br><br>Nombre: ${esc(x.empleado_nombre||"")}<br><br>Fecha: ____ / ____ / ______</td>
+      <td><div class="sp"></div>Firma: ____________________<br><br>Nombre: ${v("presRev")}<br><br>Fecha: ____ / ____ / ______</td>
+      <td><div class="sp"></div>Firma: ____________________<br><br>Nombre: ${v("presApr")}<br><br>Fecha: ____ / ____ / ______</td>
+    </tr>
+  </table>
+
+  <div class="sec">5. USO INTERNO – CONTROL DEL PRÉSTAMO</div>
+  <table class="f">
+    <tr><td class="l">Código / referencia en Odoo:</td><td>${blank}</td></tr>
+    <tr><td class="l">Cuenta contable por cobrar:</td><td>${blank}</td></tr>
+    <tr><td class="l">Fecha y referencia del pago:</td><td>${blank}</td></tr>
+    <tr><td class="l">Observaciones:</td><td>${blank}</td></tr>
+  </table>
+
+  <div class="pb"></div>
+  <div class="hd">${logo?`<img src="${logo}" alt="ENERGYCONTROL">`:'<b style="color:#24864B;font-size:15px">ENERGY CONTROL</b>'}<div class="t">ANEXO · CRONOGRAMA DE DESCUENTOS</div></div>
+  <p><b>Trabajador:</b> ${esc(x.empleado_nombre||"")} &nbsp; · &nbsp; <b>Cédula:</b> ${v("presId")} &nbsp; · &nbsp; <b>Préstamo:</b> ${esc(money($("presAmount").value))} en ${rows.length} cuota(s) ${freq==="quincenal"?"quincenales":"mensuales"}</p>
+  <table class="sched"><thead><tr><th>#</th><th>Fecha de descuento</th><th class="r">Cuota</th><th class="r">Saldo pendiente</th></tr></thead><tbody>
+  ${rows.map(r=>`<tr><td>${r.n}</td><td>${r.fecha?esc(dateEC(r.fecha)):"—"}</td><td class="r">${esc(money(r.cuota))}</td><td class="r">${esc(money(r.saldo))}</td></tr>`).join("")}
+  </tbody></table>
+  <table class="firmas" style="margin-top:40px;width:66%"><tr><td style="border:0;text-align:center;border-top:1px solid #333">Firma del trabajador</td><td style="border:0"></td><td style="border:0;text-align:center;border-top:1px solid #333">RR. HH.</td></tr></table>
+  </body></html>`);
+  w.document.close();
+  let impreso=false;const imprimir=()=>{if(impreso)return;impreso=true;try{w.focus();w.print();}catch(_){}};
+  w.onload=()=>setTimeout(imprimir,300);
+  setTimeout(imprimir,1500);
+}
+
+/* ============================================================
    CERTIFICADOS LABORALES
 ============================================================ */
 function certificateText(d){
@@ -3220,6 +3487,12 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   $("certEmployee").addEventListener("change",fillCertEmployee);
   $("certPreviewBtn").addEventListener("click",previewCertificate);
   $("certWordBtn").addEventListener("click",downloadCertificate);
+
+  $("presEmployee").addEventListener("change",fillPresEmployee);
+  ["presAmount","presCuotas","presFirst","presFreq"].forEach(k=>{$(k).addEventListener("input",calcPrestamo);$(k).addEventListener("change",calcPrestamo)});
+  $("presPreviewBtn").addEventListener("click",previewPrestamo);
+  $("presPrintBtn").addEventListener("click",printPrestamo);
+  {const t=new Date();$("presDate").value=presIso(t);}
 
   $("rolesRefreshBtn").addEventListener("click",()=>{rolesLoaded=false;costsLoaded=false;loadRoles()});
   $("rolEmployeeFilter").addEventListener("change",renderRoles);
