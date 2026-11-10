@@ -238,7 +238,7 @@
       background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);
     }
     .filters{
-      display:grid;grid-template-columns:2fr repeat(4,minmax(150px,1fr)) auto;gap:10px;padding:16px;border-bottom:1px solid var(--line);
+      display:grid;grid-template-columns:2fr repeat(4,minmax(150px,1fr)) auto auto;gap:10px;padding:16px;border-bottom:1px solid var(--line);
     }
     .filters input,.filters select{
       width:100%;border:1px solid #dbe3ee;border-radius:10px;padding:10px 11px;background:#fff;outline:none;
@@ -715,6 +715,7 @@
           <option value="INACTIVO">Inactivo</option>
         </select>
         <button class="export-btn" id="exportBtn">↓ Exportar CSV</button>
+        <button class="export-btn" id="exportDeptExcelBtn" title="Lista de empleados agrupada por departamento (respeta los filtros aplicados)">↓ Excel por departamento</button>
       </div>
 
       <div class="table-meta">
@@ -3685,6 +3686,97 @@ function exportCSV(){
   URL.revokeObjectURL(url);
 }
 
+// ===== Excel: lista de empleados por departamento =====
+function excelDate(v){
+  if(!v) return "";
+  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(v);
+}
+
+function employeesByDepartment(contracts){
+  // Un empleado puede tener más de un contrato: se deja una sola fila (el contrato más reciente).
+  const unique = new Map();
+  contracts.forEach(x=>{
+    const key = x.empleado_id || String(x.empleado_nombre || "").trim().toLowerCase();
+    if(!key) return;
+    const prev = unique.get(key);
+    if(!prev || String(x.fecha_inicio || "") > String(prev.fecha_inicio || "")) unique.set(key,x);
+  });
+  const groups = new Map();
+  [...unique.values()].forEach(x=>{
+    const dept = x._departamento || "Sin departamento";
+    if(!groups.has(dept)) groups.set(dept,[]);
+    groups.get(dept).push(x);
+  });
+  return [...groups.entries()]
+    .sort((a,b)=>a[0].localeCompare(b[0],"es"))
+    .map(([name,list])=>({
+      name,
+      employees:list.sort((a,b)=>String(a.empleado_nombre||"").localeCompare(String(b.empleado_nombre||""),"es"))
+    }));
+}
+
+function excelSheetName(name,used){
+  // Excel: máximo 31 caracteres y sin \ / ? * [ ] :
+  const base = String(name).replace(/[\\\/\?\*\[\]:]/g,"-").replace(/\s+/g," ").trim().slice(0,31) || "Hoja";
+  let finalName = base, n = 2;
+  while(used.has(finalName.toLowerCase())){
+    const suffix = ` (${n++})`;
+    finalName = base.slice(0,31-suffix.length) + suffix;
+  }
+  used.add(finalName.toLowerCase());
+  return finalName;
+}
+
+function exportEmployeesByDepartmentExcel(){
+  if(typeof XLSX==="undefined") return alert("No se cargó la librería de Excel. Recarga la página e intenta de nuevo.");
+  const groups = employeesByDepartment(filteredContracts);
+  if(!groups.length) return alert("No hay empleados que exportar con los filtros actuales.");
+
+  const head = ["N.º","Colaborador","Cargo","Jefe","Tipo contrato","Fecha ingreso","Estado"];
+  const widths = [{wch:6},{wch:38},{wch:34},{wch:30},{wch:24},{wch:14},{wch:16}];
+  const rowOf = (x,i)=>[i+1,x.empleado_nombre||"",x.cargo||"",x.jefe_nombre||"",x.tipo_contrato||"",excelDate(x.fecha_inicio),statusLabel(x.estado)];
+  const total = groups.reduce((sum,g)=>sum+g.employees.length,0);
+  const wb = XLSX.utils.book_new();
+  const used = new Set();
+
+  // Hoja 1: resumen
+  const wsResumen = XLSX.utils.aoa_to_sheet([
+    ["Empleados por departamento"],
+    [`Generado: ${excelDate(new Date().toLocaleDateString("en-CA"))}`],
+    [],
+    ["Departamento","Empleados"],
+    ...groups.map(g=>[g.name,g.employees.length]),
+    ["TOTAL",total]
+  ]);
+  wsResumen["!cols"] = [{wch:42},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,wsResumen,excelSheetName("Resumen",used));
+
+  // Hoja 2: todos los empleados, ordenados por departamento
+  const wsTodos = XLSX.utils.aoa_to_sheet([
+    ["Departamento",...head],
+    ...groups.flatMap(g=>g.employees.map((x,i)=>[g.name,...rowOf(x,i)]))
+  ]);
+  wsTodos["!cols"] = [{wch:32},...widths];
+  wsTodos["!autofilter"] = {ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:total,c:head.length}})};
+  XLSX.utils.book_append_sheet(wb,wsTodos,excelSheetName("Todos",used));
+
+  // Una hoja por departamento
+  groups.forEach(g=>{
+    const ws = XLSX.utils.aoa_to_sheet([
+      [g.name],
+      [`${g.employees.length} empleado${g.employees.length===1?"":"s"}`],
+      [],
+      head,
+      ...g.employees.map(rowOf)
+    ]);
+    ws["!cols"] = widths;
+    XLSX.utils.book_append_sheet(wb,ws,excelSheetName(g.name,used));
+  });
+
+  XLSX.writeFile(wb,`Empleados_por_departamento_${new Date().toLocaleDateString("en-CA")}.xlsx`);
+}
+
 document.addEventListener("DOMContentLoaded", async ()=>{
   const ready = initSupabase();
   const publicToken = new URLSearchParams(location.search).get("evaluacion") || new URLSearchParams(location.search).get("id");
@@ -3695,6 +3787,7 @@ document.addEventListener("DOMContentLoaded", async ()=>{
   $("logoutBtn").addEventListener("click",logout);
   $("refreshBtn").addEventListener("click",loadContracts);
   $("exportBtn").addEventListener("click",exportCSV);
+  $("exportDeptExcelBtn").addEventListener("click",exportEmployeesByDepartmentExcel);
   $("modalClose").addEventListener("click",closeModal);
   $("modalBackdrop").addEventListener("click",e=>{if(e.target.id==="modalBackdrop") closeModal();});
   $("modalEvalBtn").addEventListener("click",()=>createOrSendEvaluation(currentContract));
@@ -3840,4 +3933,3 @@ document.addEventListener("DOMContentLoaded", async ()=>{
 </script>
 </body>
 </html>
-
