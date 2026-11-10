@@ -3686,12 +3686,16 @@ function exportCSV(){
   URL.revokeObjectURL(url);
 }
 
-// ===== Excel: lista de empleados por departamento =====
-function excelDate(v){
-  if(!v) return "";
-  const m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : String(v);
-}
+// ===== Excel: lista de empleados por departamento (formato Lista_Energy) =====
+const EXCELJS_URL = "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js";
+const XL_NAVY = "FF1F3864", XL_GRAY = "FF595959", XL_BAND = "FFEEF3FA", XL_LINE = "FFD9E1F2";
+const XL_STATUS_BASE = ["Activo","Próximo hito","Urgente"];
+const XL_STATUS_COLORS = {
+  "Activo":{font:"FF375623",fill:"FFE2EFDA"},
+  "Próximo hito":{font:"FF7F6000",fill:"FFFFF2CC"},
+  "Próximo a vencer":{font:"FF7F6000",fill:"FFFFF2CC"},
+  "Urgente":{font:"FFC00000",fill:"FFFCE4E4"}
+};
 
 function employeesByDepartment(contracts){
   // Un empleado puede tener más de un contrato: se deja una sola fila (el contrato más reciente).
@@ -3717,8 +3721,8 @@ function employeesByDepartment(contracts){
 }
 
 function excelSheetName(name,used){
-  // Excel: máximo 31 caracteres y sin \ / ? * [ ] :
-  const base = String(name).replace(/[\\\/\?\*\[\]:]/g,"-").replace(/\s+/g," ").trim().slice(0,31) || "Hoja";
+  // Excel: máximo 31 caracteres y sin \ / ? * [ ] : ni apóstrofo al inicio o al final
+  const base = String(name).replace(/[\\\/\?\*\[\]:]/g,"-").replace(/\s+/g," ").trim().slice(0,31).replace(/^'+|'+$/g,"").trim() || "Hoja";
   let finalName = base, n = 2;
   while(used.has(finalName.toLowerCase())){
     const suffix = ` (${n++})`;
@@ -3728,53 +3732,264 @@ function excelSheetName(name,used){
   return finalName;
 }
 
-function exportEmployeesByDepartmentExcel(){
-  if(typeof XLSX==="undefined") return alert("No se cargó la librería de Excel. Recarga la página e intenta de nuevo.");
-  const groups = employeesByDepartment(filteredContracts);
-  if(!groups.length) return alert("No hay empleados que exportar con los filtros actuales.");
+function excelTableName(name,used){
+  // "ADMINISTRACION / COMERCIAL" -> tAdministracionComercial ; "COMERCIAL / COMERCIAL" -> tComercial
+  const words = String(name).normalize("NFD").replace(/[̀-ͯ]/g,"").split(/[^A-Za-z0-9]+/).filter(Boolean);
+  const parts = [];
+  words.forEach(w=>{
+    const p = w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+    if(!parts.includes(p)) parts.push(p);
+  });
+  let base = "t" + (parts.join("") || "Departamento");
+  if(/^[A-Za-z]{1,3}\d+$/.test(base)) base = "t_" + base.slice(1); // evita nombres que parezcan celdas (p. ej. tA1)
+  base = base.slice(0,60);
+  let finalName = base, n = 2;
+  while(used.has(finalName.toLowerCase())) finalName = base + "_" + (n++);
+  used.add(finalName.toLowerCase());
+  return finalName;
+}
 
-  const head = ["N.º","Colaborador","Cargo","Jefe","Tipo contrato","Fecha ingreso","Estado"];
-  const widths = [{wch:6},{wch:38},{wch:34},{wch:30},{wch:24},{wch:14},{wch:16}];
-  const rowOf = (x,i)=>[i+1,x.empleado_nombre||"",x.cargo||"",x.jefe_nombre||"",x.tipo_contrato||"",excelDate(x.fecha_inicio),statusLabel(x.estado)];
-  const total = groups.reduce((sum,g)=>sum+g.employees.length,0);
-  const wb = XLSX.utils.book_new();
-  const used = new Set();
+function excelDateValue(v){
+  const m = String(v || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? new Date(Date.UTC(Number(m[1]),Number(m[2])-1,Number(m[3]))) : null;
+}
 
-  // Hoja 1: resumen
-  const wsResumen = XLSX.utils.aoa_to_sheet([
-    ["Empleados por departamento"],
-    [`Generado: ${excelDate(new Date().toLocaleDateString("en-CA"))}`],
-    [],
-    ["Departamento","Empleados"],
-    ...groups.map(g=>[g.name,g.employees.length]),
-    ["TOTAL",total]
-  ]);
-  wsResumen["!cols"] = [{wch:42},{wch:12}];
-  XLSX.utils.book_append_sheet(wb,wsResumen,excelSheetName("Resumen",used));
+function xmlEsc(v){
+  return String(v).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
 
-  // Hoja 2: todos los empleados, ordenados por departamento
-  const wsTodos = XLSX.utils.aoa_to_sheet([
-    ["Departamento",...head],
-    ...groups.flatMap(g=>g.employees.map((x,i)=>[g.name,...rowOf(x,i)]))
-  ]);
-  wsTodos["!cols"] = [{wch:32},...widths];
-  wsTodos["!autofilter"] = {ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:total,c:head.length}})};
-  XLSX.utils.book_append_sheet(wb,wsTodos,excelSheetName("Todos",used));
+function buildEmployeesWorkbook(ExcelJSLib,groups,todayText){
+  const wb = new ExcelJSLib.Workbook();
+  wb.creator = "Dashboard RRHH ENERGYCONTROL";
+  wb.calcProperties.fullCalcOnLoad = true;
 
-  // Una hoja por departamento
+  const font = extra=>({name:"Calibri",size:12,color:{theme:1},...extra});
+  const solid = argb=>({type:"pattern",pattern:"solid",fgColor:{argb}});
+  const line = argb=>({style:"thin",color:{argb}});
+  const titleFont = {name:"Calibri",size:16,bold:true,color:{argb:XL_NAVY}};
+  const noteFont = {name:"Calibri",size:11,italic:true,color:{argb:XL_GRAY}};
+  const headFont = {name:"Calibri",size:12,bold:true,color:{argb:"FFFFFFFF"}};
+  const intFmt = '#,##0;\\(#,##0\\);"-"', pctFmt = '0.0%;\\(0.0%\\);"-"', dateFmt = "dd/mm/yyyy";
+  const colLetter = n=>{let s="";while(n>0){const r=(n-1)%26;s=String.fromCharCode(65+r)+s;n=Math.floor((n-1)/26);}return s;};
+  const statusRules = (col,first,last)=>Object.entries(XL_STATUS_COLORS).map(([text,c],i)=>({
+    type:"expression",priority:i+1,formulae:[`$${col}${first}="${text}"`],
+    style:{font:{bold:true,color:{argb:c.font}},fill:{type:"pattern",pattern:"solid",bgColor:{argb:c.fill}}}
+  }));
+
+  const usedSheets = new Set(), usedTables = new Set();
+  const resumenName = excelSheetName("Resumen",usedSheets);
+  const todosName = excelSheetName("Todos",usedSheets);
   groups.forEach(g=>{
-    const ws = XLSX.utils.aoa_to_sheet([
-      [g.name],
-      [`${g.employees.length} empleado${g.employees.length===1?"":"s"}`],
-      [],
-      head,
-      ...g.employees.map(rowOf)
-    ]);
-    ws["!cols"] = widths;
-    XLSX.utils.book_append_sheet(wb,ws,excelSheetName(g.name,used));
+    g.sheet = excelSheetName(g.name,usedSheets);
+    g.table = excelTableName(g.name,usedTables);
+    g.rows = g.employees.map(x=>({
+      nombre:x.empleado_nombre||"",cargo:x.cargo||"",jefe:x.jefe_nombre||"",tipo:x.tipo_contrato||"",
+      ingreso:excelDateValue(x.fecha_inicio),estado:statusLabel(x.estado)
+    }));
+  });
+  const total = groups.reduce((sum,g)=>sum+g.rows.length,0);
+  const extraStatuses = [...new Set(groups.flatMap(g=>g.rows.map(r=>r.estado)))]
+    .filter(s=>s && !XL_STATUS_BASE.includes(s)).sort((a,b)=>a.localeCompare(b,"es"));
+  const statuses = [...XL_STATUS_BASE,...extraStatuses];
+
+  // ---------- Hoja Resumen ----------
+  const wsR = wb.addWorksheet(resumenName,{views:[{showGridLines:false}]});
+  const pctCol = 3 + statuses.length;                 // A=Departamento, B=Colaboradores, C..=estados, última=%
+  wsR.getColumn(1).width = 38.3;
+  for(let c=2;c<=pctCol;c++) wsR.getColumn(c).width = 14.2;
+  wsR.getCell("A1").value = "Colaboradores por departamento"; wsR.getCell("A1").font = titleFont; wsR.getRow(1).height = 21;
+  wsR.getCell("A2").value = `Corte: ${todayText}`; wsR.getCell("A2").font = {...noteFont,size:12};
+  ["Departamento","Colaboradores",...statuses,"% del total"].forEach((h,i)=>{
+    const cell = wsR.getCell(4,i+1);
+    cell.value = h; cell.font = headFont; cell.fill = solid(XL_NAVY);
+    cell.alignment = {horizontal:i===0?undefined:"center",vertical:"middle",wrapText:true};
+  });
+  wsR.getRow(4).height = 22.05;
+  const firstR = 5, lastR = 4 + groups.length, totalR = lastR + 1;
+  groups.forEach((g,i)=>{
+    const r = firstR + i;
+    const cells = [wsR.getCell(r,1),wsR.getCell(r,2)];
+    cells[0].value = g.name;
+    cells[1].value = {formula:`COUNTA(${g.table}[Colaborador])`,result:g.rows.length};
+    statuses.forEach((s,k)=>{
+      const cell = wsR.getCell(r,3+k), L = colLetter(3+k);
+      cell.value = {formula:`COUNTIF(${g.table}[Estado],${L}$4)`,result:g.rows.filter(x=>x.estado===s).length};
+      cells.push(cell);
+    });
+    const pct = wsR.getCell(r,pctCol);
+    pct.value = {formula:`IFERROR(B${r}/$B$${totalR},0)`,result:total?g.rows.length/total:0};
+    cells.push(pct);
+    cells.forEach((cell,k)=>{
+      cell.font = font();
+      cell.border = {top:line(XL_LINE),bottom:line(XL_LINE)};
+      if(i%2===1) cell.fill = solid(XL_BAND);
+      if(k>0){cell.alignment = {horizontal:"center"}; cell.numFmt = cell===pct?pctFmt:intFmt;}
+    });
+  });
+  for(let c=1;c<=pctCol;c++){
+    const cell = wsR.getCell(totalR,c), L = colLetter(c);
+    if(c===1) cell.value = "TOTAL";
+    else if(c===2) cell.value = {formula:`SUM(B${firstR}:B${lastR})`,result:total};
+    else if(c===pctCol) cell.value = {formula:`SUM(${L}${firstR}:${L}${lastR})`,result:total?1:0};
+    else cell.value = {formula:`SUM(${L}${firstR}:${L}${lastR})`,result:groups.reduce((sum,g)=>sum+g.rows.filter(x=>x.estado===statuses[c-3]).length,0)};
+    cell.font = font({bold:true}); cell.fill = solid(XL_LINE); cell.border = {top:line(XL_NAVY)};
+    if(c>1){cell.alignment = {horizontal:"center"}; cell.numFmt = c===pctCol?pctFmt:intFmt;}
+  }
+  const check = wsR.getCell(totalR+1,1);
+  check.value = {formula:`IF(B${totalR}=COUNTA(${todosName}!C5:C${Math.max(500,total+100)}),"✓ Cuadra con la pestaña Todos","⚠ No cuadra con la pestaña Todos")`,result:"✓ Cuadra con la pestaña Todos"};
+  check.font = {name:"Calibri",size:9,italic:true,color:{argb:XL_GRAY}};
+
+  // ---------- Hoja Todos ----------
+  const wsT = wb.addWorksheet(todosName,{views:[{showGridLines:false,state:"frozen",ySplit:4}]});
+  [38.3,6.7,35,50,31.7,44.2,14.2,14.2].forEach((w,i)=>{wsT.getColumn(i+1).width = w;});
+  wsT.getCell("A1").value = "Listado general de colaboradores"; wsT.getCell("A1").font = titleFont; wsT.getRow(1).height = 21;
+  wsT.getCell("A2").value = {formula:`COUNTA(C5:C${Math.max(500,total+100)})&" colaboradores · Fuente: pestañas de cada departamento"`,result:`${total} colaboradores · Fuente: pestañas de cada departamento`};
+  wsT.getCell("A2").font = noteFont;
+  const centerT = [2,7,8];
+  ["Departamento","N.º","Colaborador","Cargo","Jefe","Tipo contrato","Fecha ingreso","Estado"].forEach((h,i)=>{
+    const cell = wsT.getCell(4,i+1);
+    cell.value = h; cell.font = headFont; cell.fill = solid(XL_NAVY);
+    cell.alignment = {horizontal:centerT.includes(i+1)?"center":undefined,vertical:"middle"};
+  });
+  wsT.getRow(4).height = 22.05;
+  let rT = 5;
+  groups.forEach(g=>g.rows.forEach((x,i)=>{
+    [g.name,i+1,x.nombre,x.cargo,x.jefe,x.tipo,x.ingreso,x.estado].forEach((v,k)=>{
+      const cell = wsT.getCell(rT,k+1);
+      cell.value = v;
+      cell.font = k===0 && i===0 ? font({bold:true,color:{argb:XL_NAVY}}) : font();
+      cell.border = {bottom:line(XL_LINE)};
+      if(rT%2===0) cell.fill = solid(XL_BAND);
+      if(centerT.includes(k+1)) cell.alignment = {horizontal:"center"};
+      if(k===6) cell.numFmt = dateFmt;
+    });
+    rT++;
+  }));
+  if(total) wsT.addConditionalFormatting({ref:`H5:H${4+total}`,rules:statusRules("H",5)});
+
+  // ---------- Una hoja (con tabla de Excel) por departamento ----------
+  groups.forEach(g=>{
+    const ws = wb.addWorksheet(g.sheet,{views:[{showGridLines:false,state:"frozen",ySplit:4}]});
+    [7.5,35,50,31.7,44.2,15.8,15.8].forEach((w,i)=>{ws.getColumn(i+1).width = w;});
+    ws.getCell("A1").value = g.name; ws.getCell("A1").font = titleFont; ws.getRow(1).height = 21;
+    const n = g.rows.length;
+    ws.getCell("A2").value = {formula:`COUNTA(${g.table}[Colaborador])&IF(COUNTA(${g.table}[Colaborador])=1," colaborador"," colaboradores")`,result:`${n} colaborador${n===1?"":"es"}`};
+    ws.getCell("A2").font = noteFont; ws.getCell("A2").alignment = {horizontal:"left"};
+    ws.addTable({
+      name:g.table,displayName:g.table,ref:"A4",headerRow:true,totalsRow:false,
+      style:{theme:"TableStyleMedium2",showRowStripes:true},
+      columns:["N.º","Colaborador","Cargo","Jefe","Tipo contrato","Fecha ingreso","Estado"].map(name=>({name,filterButton:false})),
+      rows:g.rows.map((x,i)=>[i+1,x.nombre,x.cargo,x.jefe,x.tipo,x.ingreso,x.estado])
+    });
+    const centerD = [1,6,7];
+    for(let c=1;c<=7;c++){
+      const head = ws.getCell(4,c);
+      head.font = font({bold:true});
+      head.alignment = {horizontal:centerD.includes(c)?"center":undefined,vertical:"middle"};
+    }
+    ws.getRow(4).height = 22.05;
+    g.rows.forEach((x,i)=>{
+      const r = 5 + i;
+      ws.getCell(r,1).value = {formula:`ROW()-ROW(${g.table}[#Headers])`,result:i+1};
+      for(let c=1;c<=7;c++){
+        const cell = ws.getCell(r,c);
+        cell.font = font();
+        if(centerD.includes(c)) cell.alignment = {horizontal:"center"};
+        if(c===6) cell.numFmt = dateFmt;
+      }
+    });
+    ws.addConditionalFormatting({ref:`G5:G${4+n}`,rules:statusRules("G",5)});
   });
 
-  XLSX.writeFile(wb,`Empleados_por_departamento_${new Date().toLocaleDateString("en-CA")}.xlsx`);
+  return {workbook:wb,resumenName,firstR,lastR,groups};
+}
+
+function chartXmlForDepartments(info){
+  // Gráfico de barras horizontales "Colaboradores por departamento" (misma definición que el archivo modelo).
+  const sheet = "'" + info.resumenName.replace(/'/g,"''") + "'";
+  const n = info.groups.length;
+  const txt = (sz,lum,off)=>`<c:txPr><a:bodyPr rot="-60000000" spcFirstLastPara="1" vertOverflow="ellipsis" vert="horz" wrap="square" anchor="ctr" anchorCtr="1"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${sz}" b="0" i="0" u="none" strike="noStrike" kern="1200" baseline="0"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="${lum}"/><a:lumOff val="${off}"/></a:schemeClr></a:solidFill><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:pPr><a:endParaRPr lang="es-EC"/></a:p></c:txPr>`;
+  const noFill = `<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln><a:effectLst/></c:spPr>`;
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><c:date1904 val="0"/><c:lang val="es-ES"/><c:roundedCorners val="0"/><c:chart><c:title><c:tx><c:rich><a:bodyPr rot="0" spcFirstLastPara="1" vertOverflow="ellipsis" vert="horz" wrap="square" anchor="ctr" anchorCtr="1"/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="1400" b="0" i="0" u="none" strike="noStrike" kern="1200" spc="0" baseline="0"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="65000"/><a:lumOff val="35000"/></a:schemeClr></a:solidFill><a:latin typeface="+mn-lt"/><a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:pPr><a:r><a:rPr lang="es-EC"/><a:t>Colaboradores por departamento</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/>${noFill}</c:title><c:autoTitleDeleted val="0"/><c:plotArea><c:layout/><c:barChart><c:barDir val="bar"/><c:grouping val="clustered"/><c:varyColors val="0"/><c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:strRef><c:f>${sheet}!$B$4</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>Colaboradores</c:v></c:pt></c:strCache></c:strRef></c:tx><c:spPr><a:solidFill><a:srgbClr val="1F3864"/></a:solidFill><a:ln><a:noFill/></a:ln><a:effectLst/></c:spPr><c:invertIfNegative val="0"/><c:dLbls>${noFill}${txt(900,75000,25000).replace('rot="-60000000"','rot="0"')}<c:showLegendKey val="0"/><c:showVal val="1"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/><c:showLeaderLines val="0"/></c:dLbls><c:cat><c:strRef><c:f>${sheet}!$A$${info.firstR}:$A$${info.lastR}</c:f><c:strCache><c:ptCount val="${n}"/>${info.groups.map((g,i)=>`<c:pt idx="${i}"><c:v>${xmlEsc(g.name)}</c:v></c:pt>`).join("")}</c:strCache></c:strRef></c:cat><c:val><c:numRef><c:f>${sheet}!$B$${info.firstR}:$B$${info.lastR}</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="${n}"/>${info.groups.map((g,i)=>`<c:pt idx="${i}"><c:v>${g.rows.length}</c:v></c:pt>`).join("")}</c:numCache></c:numRef></c:val></c:ser><c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls><c:gapWidth val="182"/><c:axId val="978433440"/><c:axId val="2033314624"/></c:barChart><c:catAx><c:axId val="978433440"/><c:scaling><c:orientation val="maxMin"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:spPr><a:noFill/><a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="15000"/><a:lumOff val="85000"/></a:schemeClr></a:solidFill><a:round/></a:ln><a:effectLst/></c:spPr>${txt(900,65000,35000)}<c:crossAx val="2033314624"/><c:crosses val="autoZero"/><c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/></c:catAx><c:valAx><c:axId val="2033314624"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="t"/><c:numFmt formatCode="0" sourceLinked="0"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/>${noFill}${txt(900,65000,35000)}<c:crossAx val="978433440"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>${noFill}</c:plotArea><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart><c:spPr><a:solidFill><a:schemeClr val="bg1"/></a:solidFill><a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="15000"/><a:lumOff val="85000"/></a:schemeClr></a:solidFill><a:round/></a:ln><a:effectLst/></c:spPr><c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr/></a:pPr><a:endParaRPr lang="es-EC"/></a:p></c:txPr><c:printSettings><c:headerFooter/><c:pageMargins b="0.75" l="0.7" r="0.7" t="0.75" header="0.3" footer="0.3"/><c:pageSetup/></c:printSettings></c:chartSpace>`;
+}
+
+function addDepartmentChart(zip,info){
+  // ExcelJS no crea gráficos: se agrega el gráfico al .xlsx ya generado (hoja Resumen = primera hoja).
+  const wbRels = zip.file("xl/_rels/workbook.xml.rels").asText();
+  const wbXml = zip.file("xl/workbook.xml").asText();
+  const rid = (wbXml.match(/<sheet\b[^>]*?r:id="([^"]+)"/) || [])[1];
+  const target = rid && (wbRels.match(new RegExp(`<Relationship\\b[^>]*Id="${rid}"[^>]*>`)) || [""])[0].match(/Target="([^"]+)"/);
+  if(!target) throw new Error("No se encontró la hoja Resumen en el archivo.");
+  const sheetPath = "xl/" + target[1].replace(/^\/?(xl\/)?/,"");
+  const relsPath = sheetPath.replace("worksheets/","worksheets/_rels/") + ".rels";
+  let sheetXml = zip.file(sheetPath).asText();
+  if(sheetXml.includes("<drawing ")) throw new Error("La hoja Resumen ya tiene un dibujo.");
+
+  const REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  const relTag = `<Relationship Id="rIdGraficoDeptos" Type="${REL}/drawing" Target="../drawings/drawingDeptos.xml"/>`;
+  const relsFile = zip.file(relsPath);
+  zip.file(relsPath, relsFile
+    ? relsFile.asText().replace("</Relationships>",relTag+"</Relationships>")
+    : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relTag}</Relationships>`);
+
+  if(!/<worksheet\b[^>]*xmlns:r=/.test(sheetXml)) sheetXml = sheetXml.replace("<worksheet ",`<worksheet xmlns:r="${REL}" `);
+  const drawingTag = `<drawing r:id="rIdGraficoDeptos"/>`;
+  const anchor = ["<legacyDrawing","<tableParts","<extLst","</worksheet>"].map(t=>sheetXml.indexOf(t)).filter(i=>i>=0).sort((a,b)=>a-b)[0];
+  zip.file(sheetPath, sheetXml.slice(0,anchor) + drawingTag + sheetXml.slice(anchor));
+
+  const lastRow = Math.max(12, info.lastR + 3);
+  zip.file("xl/drawings/drawingDeptos.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><xdr:twoCellAnchor><xdr:from><xdr:col>${info.chartCol}</xdr:col><xdr:colOff>457200</xdr:colOff><xdr:row>2</xdr:row><xdr:rowOff>99060</xdr:rowOff></xdr:from><xdr:to><xdr:col>${info.chartCol+7}</xdr:col><xdr:colOff>99060</xdr:colOff><xdr:row>${lastRow}</xdr:row><xdr:rowOff>167640</xdr:rowOff></xdr:to><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Gráfico 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="${REL}" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>`);
+  zip.file("xl/drawings/_rels/drawingDeptos.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${REL}/chart" Target="../charts/chartDeptos.xml"/></Relationships>`);
+  zip.file("xl/charts/chartDeptos.xml", chartXmlForDepartments(info));
+
+  // Las tablas no llevan fila de totales: se deja el atributo como lo escribe Excel.
+  Object.keys(zip.files).filter(f=>/^xl\/tables\/table\d+\.xml$/.test(f)).forEach(f=>{
+    zip.file(f, zip.file(f).asText().replace('totalsRowShown="1"','totalsRowShown="0"').replace(' totalsRowLabel="Total"',"").replace(/ totalsRowFunction="none"/g,""));
+  });
+
+  const types = zip.file("[Content_Types].xml").asText();
+  zip.file("[Content_Types].xml", types.replace("</Types>",
+    `<Override PartName="/xl/drawings/drawingDeptos.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/><Override PartName="/xl/charts/chartDeptos.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/></Types>`));
+  return zip;
+}
+
+function loadExcelJS(){
+  if(typeof ExcelJS!=="undefined") return Promise.resolve(ExcelJS);
+  return new Promise((resolve,reject)=>{
+    const s = document.createElement("script");
+    s.src = EXCELJS_URL;
+    s.onload = ()=>typeof ExcelJS!=="undefined" ? resolve(ExcelJS) : reject(new Error("ExcelJS no quedó disponible."));
+    s.onerror = ()=>reject(new Error("No se pudo descargar la librería de Excel (ExcelJS)."));
+    document.head.appendChild(s);
+  });
+}
+
+async function exportEmployeesByDepartmentExcel(){
+  const groups = employeesByDepartment(filteredContracts);
+  if(!groups.length) return alert("No hay empleados que exportar con los filtros actuales.");
+  const btn = $("exportDeptExcelBtn"), label = btn.textContent;
+  btn.disabled = true; btn.textContent = "Generando Excel...";
+  try{
+    const lib = await loadExcelJS();
+    const today = new Date().toLocaleDateString("en-CA");                       // AAAA-MM-DD en hora local
+    const info = buildEmployeesWorkbook(lib,groups,today.split("-").reverse().join("/"));
+    const buffer = await info.workbook.xlsx.writeBuffer();
+    const mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    let blob = new Blob([buffer],{type:mime});
+    try{
+      info.chartCol = info.workbook.getWorksheet(info.resumenName).columnCount;   // el gráfico va a la derecha de la tabla
+      blob = addDepartmentChart(new PizZip(buffer),info).generate({type:"blob",mimeType:mime,compression:"DEFLATE"});
+    }catch(chartError){
+      console.warn("Excel generado sin gráfico:",chartError);
+    }
+    saveAs(blob,`Empleados_por_departamento_${today}.xlsx`);
+  }catch(e){
+    console.error(e);
+    alert("No se pudo generar el Excel: " + (e?.message || e));
+  }finally{
+    btn.disabled = false; btn.textContent = label;
+  }
 }
 
 document.addEventListener("DOMContentLoaded", async ()=>{
